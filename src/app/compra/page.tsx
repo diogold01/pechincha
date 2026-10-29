@@ -20,6 +20,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
 import FrequentProductsBar from "@/components/FrequentProductsBar";
+import LiveMarketMode from "@/components/LiveMarketMode";
 import {
   LIMITE_ORCAMENTO_ALERTA,
   LIMITE_ORCAMENTO_ESTOURO,
@@ -107,6 +108,7 @@ function CompraPlanejamentoContent() {
 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [forcarPlanejamento, setForcarPlanejamento] = useState(false);
 
   const carregarDados = useCallback(
     async (preferCartId?: string | null) => {
@@ -952,12 +954,18 @@ function CompraPlanejamentoContent() {
 
   async function handleIniciarModoMercado() {
     if (!carrinhoAtual) return;
+    setForcarPlanejamento(false);
+    // Atualização otimista para entrar no Modo Mercado imediatamente
+    setCarrinhosAtivos((prev) =>
+      prev.map((c) =>
+        c.id === carrinhoAtual.id ? { ...c, status: "em_compra" } : c
+      )
+    );
     const supabase = createClient();
     await supabase
       .from("carts")
       .update({ status: "em_compra" })
       .eq("id", carrinhoAtual.id);
-    await carregarDados(carrinhoAtual.id);
   }
 
   const mercadoAtualNome =
@@ -965,6 +973,33 @@ function CompraPlanejamentoContent() {
       mapaMercados.get(carrinhoAtual.market_id)?.nome) ||
     (mercadoPadraoId && mapaMercados.get(mercadoPadraoId)?.nome) ||
     "Escolher mercado";
+
+  if (
+    !carregando &&
+    groupId &&
+    carrinhoAtual &&
+    carrinhoAtual.status === "em_compra" &&
+    !forcarPlanejamento
+  ) {
+    return (
+      <LiveMarketMode
+        groupId={groupId}
+        userId={userId}
+        carrinho={carrinhoAtual}
+        itensCarrinho={itensCarrinho}
+        setItensCarrinho={setItensCarrinho}
+        produtos={produtos}
+        setores={setores}
+        mercados={mercados}
+        precos={precos}
+        settings={settings}
+        ordemSetoresMercado={ordemSetoresMercado}
+        gastoMesPorSetor={gastoMesPorSetor}
+        onReload={carregarDados}
+        onVoltarPlanejamento={() => setForcarPlanejamento(true)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-text-main pb-32">
