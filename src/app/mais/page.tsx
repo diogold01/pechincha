@@ -566,21 +566,29 @@ export default function MaisPage() {
                   Abrir
                 </span>
               </button>
-              <div className="flex items-center justify-between py-2.5 px-1 opacity-75">
+              <button
+                type="button"
+                onClick={() => router.push("/exportar")}
+                className="flex items-center justify-between py-2.5 px-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-background text-text-muted flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
                     <Download className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="text-sm font-bold">
-                      Exportar CSV e Backup
+                    <div className="text-sm font-extrabold text-text-main">
+                      Exportar CSV, Backup e App
                     </div>
                     <div className="text-xs text-text-muted">
-                      Disponível na Etapa 8
+                      Planilha para finanças, backup completo e instalar no
+                      celular
                     </div>
                   </div>
                 </div>
-              </div>
+                <span className="h-9 px-3 rounded-xl bg-primary-light text-primary-hover font-bold text-xs flex items-center justify-center shrink-0">
+                  Abrir
+                </span>
+              </button>
             </section>
           </>
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   X,
@@ -19,6 +19,11 @@ import {
   ShoppingBag,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  enfileirarOperacaoOffline,
+  lerFilaOffline,
+  processarFilaOffline,
+} from "@/lib/offline-sync";
 import {
   LIMITE_ORCAMENTO_ALERTA,
   LIMITE_ORCAMENTO_ESTOURO,
@@ -91,7 +96,42 @@ export default function LiveMarketMode({
   const router = useRouter();
 
   const [sincronizando, setSincronizando] = useState(false);
+  const [estaOffline, setEstaOffline] = useState(false);
+  const [qtdFilaOffline, setQtdFilaOffline] = useState(0);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Monitora sinal de internet e sincroniza automaticamente a fila offline quando o sinal voltar (Seção 9)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setEstaOffline(!window.navigator.onLine);
+
+    lerFilaOffline().then((f) => setQtdFilaOffline(f.length));
+
+    async function sincronizarQuandoOnline() {
+      setEstaOffline(false);
+      setSincronizando(true);
+      try {
+        const res = await processarFilaOffline();
+        setQtdFilaOffline(res.restantes);
+        if (res.sincronizadas > 0) {
+          await onReload(carrinho.id);
+        }
+      } finally {
+        setSincronizando(false);
+      }
+    }
+
+    function aoFicarOffline() {
+      setEstaOffline(true);
+    }
+
+    window.addEventListener("online", sincronizarQuandoOnline);
+    window.addEventListener("offline", aoFicarOffline);
+    return () => {
+      window.removeEventListener("online", sincronizarQuandoOnline);
+      window.removeEventListener("offline", aoFicarOffline);
+    };
+  }, [carrinho.id, onReload]);
 
   // Estado de swipe para remover item deslizando
   const [itemDeslizadoId, setItemDeslizadoId] = useState<string | null>(null);
@@ -377,16 +417,34 @@ export default function LiveMarketMode({
       )
     );
 
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "UPDATE_CART_ITEM",
+        alvoId: item.id,
+        dados: { marcado: novoMarcado, preco_real: novoPrecoReal },
+      });
+      setQtdFilaOffline(totalFila);
+      return;
+    }
+
     setSincronizando(true);
     try {
       const supabase = createClient();
-      await supabase
+      const { error } = await supabase
         .from("cart_items")
         .update({
           marcado: novoMarcado,
           preco_real: novoPrecoReal,
         })
         .eq("id", item.id);
+      if (error) throw error;
+    } catch {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "UPDATE_CART_ITEM",
+        alvoId: item.id,
+        dados: { marcado: novoMarcado, preco_real: novoPrecoReal },
+      });
+      setQtdFilaOffline(totalFila);
     } finally {
       setSincronizando(false);
     }
@@ -396,10 +454,32 @@ export default function LiveMarketMode({
   async function handleRemoverItem(itemId: string) {
     setItensCarrinho((prev) => prev.filter((x) => x.id !== itemId));
     setItemDeslizadoId(null);
+
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "DELETE_CART_ITEM",
+        alvoId: itemId,
+        dados: {},
+      });
+      setQtdFilaOffline(totalFila);
+      return;
+    }
+
     setSincronizando(true);
     try {
       const supabase = createClient();
-      await supabase.from("cart_items").delete().eq("id", itemId);
+      const { error } = await supabase
+        .from("cart_items")
+        .delete()
+        .eq("id", itemId);
+      if (error) throw error;
+    } catch {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "DELETE_CART_ITEM",
+        alvoId: itemId,
+        dados: {},
+      });
+      setQtdFilaOffline(totalFila);
     } finally {
       setSincronizando(false);
     }
@@ -408,28 +488,48 @@ export default function LiveMarketMode({
   // --- Interação 3: Reordenar Setores conforme corredores do mercado ---
   async function salvarNovaOrdemSetores(novaListaIdsSetores: string[]) {
     if (!marketIdCarrinho) return;
+    // Monta a ordem completa mantendo os setores visíveis na frente
+    const idsRestantes = setoresOrdenados
+      .map((s) => s.id)
+      .filter((id) => !novaListaIdsSetores.includes(id));
+    const todosIds = [...novaListaIdsSetores, ...idsRestantes].filter(
+      (id) => id !== "sem_setor"
+    );
+
+    const registros = todosIds.map((secId, index) => ({
+      market_id: marketIdCarrinho,
+      sector_id: secId,
+      group_id: groupId,
+      posicao: index + 1,
+    }));
+
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "REORDER_SECTORS",
+        alvoId: marketIdCarrinho,
+        dados: { group_id: groupId, ordens: registros },
+      });
+      setQtdFilaOffline(totalFila);
+      return;
+    }
+
     setSincronizando(true);
     try {
       const supabase = createClient();
-      // Monta a ordem completa mantendo os setores visíveis na frente
-      const idsRestantes = setoresOrdenados
-        .map((s) => s.id)
-        .filter((id) => !novaListaIdsSetores.includes(id));
-      const todosIds = [...novaListaIdsSetores, ...idsRestantes].filter(
-        (id) => id !== "sem_setor"
-      );
-
-      const registros = todosIds.map((secId, index) => ({
-        market_id: marketIdCarrinho,
-        sector_id: secId,
-        group_id: groupId,
-        posicao: index + 1,
-      }));
-
-      await supabase.from("market_sector_order").upsert(registros, {
-        onConflict: "market_id,sector_id",
-      });
+      const { error } = await supabase
+        .from("market_sector_order")
+        .upsert(registros, {
+          onConflict: "market_id,sector_id",
+        });
+      if (error) throw error;
       await onReload(carrinho.id);
+    } catch {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "REORDER_SECTORS",
+        alvoId: marketIdCarrinho,
+        dados: { group_id: groupId, ordens: registros },
+      });
+      setQtdFilaOffline(totalFila);
     } finally {
       setSincronizando(false);
     }
@@ -633,20 +733,34 @@ export default function LiveMarketMode({
 
     const itemSalvo = itemPrecoAtivo;
     setItemPrecoAtivo(null);
+
+    const payloadUpdate = {
+      quantidade: qtdFinal,
+      marca: marcaFinal,
+      preco_real: precoUnitarioFinal,
+      marcado: true,
+      atacado_aplicado: usarAtacado,
+    };
+
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "UPDATE_CART_ITEM",
+        alvoId: itemSalvo.id,
+        dados: payloadUpdate,
+      });
+      setQtdFilaOffline(totalFila);
+      return;
+    }
+
     setSincronizando(true);
 
     try {
       const supabase = createClient();
-      await supabase
+      const { error } = await supabase
         .from("cart_items")
-        .update({
-          quantidade: qtdFinal,
-          marca: marcaFinal,
-          preco_real: precoUnitarioFinal,
-          marcado: true,
-          atacado_aplicado: usarAtacado,
-        })
+        .update(payloadUpdate)
         .eq("id", itemSalvo.id);
+      if (error) throw error;
 
       // Se o usuário também preencheu um preço de atacado nas opções, registra no histórico de atacado
       if (ehAtacadoSheet && precoAtacadoNum > 0 && marketIdCarrinho) {
@@ -662,6 +776,13 @@ export default function LiveMarketMode({
           criado_por: userId,
         });
       }
+    } catch {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "UPDATE_CART_ITEM",
+        alvoId: itemSalvo.id,
+        dados: payloadUpdate,
+      });
+      setQtdFilaOffline(totalFila);
     } finally {
       setSincronizando(false);
     }
@@ -677,50 +798,116 @@ export default function LiveMarketMode({
   async function handleAdicionarProdutoRapidoAoVivo(prod: Product) {
     const existente = itensCarrinho.find((i) => i.product_id === prod.id);
     const supabase = createClient();
-    setSincronizando(true);
 
-    try {
-      if (existente) {
-        const novaQtd = Number(existente.quantidade) + 1;
-        setItensCarrinho((prev) =>
-          prev.map((x) =>
-            x.id === existente.id ? { ...x, quantidade: novaQtd } : x
-          )
-        );
-        await supabase
+    if (existente) {
+      const novaQtd = Number(existente.quantidade) + 1;
+      setItensCarrinho((prev) =>
+        prev.map((x) =>
+          x.id === existente.id ? { ...x, quantidade: novaQtd } : x
+        )
+      );
+      setSheetAdicionarAberto(false);
+      setBuscaRapida("");
+
+      if (typeof window !== "undefined" && !window.navigator.onLine) {
+        const totalFila = await enfileirarOperacaoOffline({
+          tipo: "UPDATE_CART_ITEM",
+          alvoId: existente.id,
+          dados: { quantidade: novaQtd },
+        });
+        setQtdFilaOffline(totalFila);
+        return;
+      }
+
+      setSincronizando(true);
+      try {
+        const { error } = await supabase
           .from("cart_items")
           .update({ quantidade: novaQtd })
           .eq("id", existente.id);
-      } else {
-        const lista = precosPorProduto.get(prod.id) || [];
-        const calc = calcularEstimativaItemCarrinho(lista, 1, {
-          metodo: settings?.metodo_preco || "media",
-          mesesMedia: settings?.meses_media || 3,
-          marketIdCarrinho,
+        if (error) throw error;
+      } catch {
+        const totalFila = await enfileirarOperacaoOffline({
+          tipo: "UPDATE_CART_ITEM",
+          alvoId: existente.id,
+          dados: { quantidade: novaQtd },
         });
-
-        const { data: novoItem } = await supabase
-          .from("cart_items")
-          .insert({
-            cart_id: carrinho.id,
-            group_id: groupId,
-            product_id: prod.id,
-            quantidade: 1,
-            preco_estimado: calc.precoUnitarioEstimado,
-            preco_real: null,
-            marcado: false,
-            atacado_aplicado: calc.atacadoAplicado,
-            ordem: itensCarrinho.length + 1,
-          })
-          .select()
-          .single();
-
-        if (novoItem) {
-          setItensCarrinho((prev) => [...prev, novoItem as CartItem]);
-        }
+        setQtdFilaOffline(totalFila);
+      } finally {
+        setSincronizando(false);
       }
-      setSheetAdicionarAberto(false);
-      setBuscaRapida("");
+      return;
+    }
+
+    const lista = precosPorProduto.get(prod.id) || [];
+    const calc = calcularEstimativaItemCarrinho(lista, 1, {
+      metodo: settings?.metodo_preco || "media",
+      mesesMedia: settings?.meses_media || 3,
+      marketIdCarrinho,
+    });
+
+    const tempId = `temp-${Date.now()}`;
+    const itemOtimista: CartItem = {
+      id: tempId,
+      cart_id: carrinho.id,
+      group_id: groupId,
+      product_id: prod.id,
+      marca: null,
+      quantidade: 1,
+      preco_estimado: calc.precoUnitarioEstimado,
+      preco_real: null,
+      marcado: false,
+      atacado_aplicado: calc.atacadoAplicado,
+      ordem: itensCarrinho.length + 1,
+      atualizado_em: new Date().toISOString(),
+    };
+
+    setItensCarrinho((prev) => [...prev, itemOtimista]);
+    setSheetAdicionarAberto(false);
+    setBuscaRapida("");
+
+    const payloadInsert = {
+      cart_id: carrinho.id,
+      group_id: groupId,
+      product_id: prod.id,
+      quantidade: 1,
+      preco_estimado: calc.precoUnitarioEstimado,
+      preco_real: null,
+      marcado: false,
+      atacado_aplicado: calc.atacadoAplicado,
+      ordem: itensCarrinho.length + 1,
+    };
+
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "INSERT_CART_ITEM",
+        alvoId: tempId,
+        dados: payloadInsert,
+      });
+      setQtdFilaOffline(totalFila);
+      return;
+    }
+
+    setSincronizando(true);
+    try {
+      const { data: novoItem, error } = await supabase
+        .from("cart_items")
+        .insert(payloadInsert)
+        .select()
+        .single();
+
+      if (error || !novoItem) throw error;
+
+      setItensCarrinho((prev) =>
+        prev.map((x) => (x.id === tempId ? (novoItem as CartItem) : x))
+      );
+    } catch {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "INSERT_CART_ITEM",
+        alvoId: tempId,
+        dados: payloadInsert,
+      });
+      setQtdFilaOffline(totalFila);
     } finally {
       setSincronizando(false);
     }
@@ -965,22 +1152,33 @@ export default function LiveMarketMode({
               <ChevronDown className="w-4 h-4 text-text-muted shrink-0" />
             </button>
 
-            <div className="w-20 flex items-center justify-end gap-1.5 text-xs font-semibold text-text-muted shrink-0">
+            <div
+              className="w-24 flex items-center justify-end gap-1.5 text-xs font-semibold text-text-muted shrink-0"
+              title={
+                estaOffline || qtdFilaOffline > 0
+                  ? "As alterações estão salvas no aparelho e sincronizam automaticamente quando a conexão voltar"
+                  : "Sincronizado com o servidor"
+              }
+            >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  sincronizando || pulsoRealtime
-                    ? "bg-primary animate-ping"
-                    : aoVivoConectado
-                      ? "bg-primary"
-                      : "bg-text-muted"
+                  estaOffline
+                    ? "bg-text-muted"
+                    : sincronizando || pulsoRealtime || qtdFilaOffline > 0
+                      ? "bg-primary animate-ping"
+                      : aoVivoConectado
+                        ? "bg-primary"
+                        : "bg-text-muted"
                 }`}
               />
               <span>
-                {sincronizando
-                  ? "Salvando"
-                  : aoVivoConectado
-                    ? "Ao vivo"
-                    : "Salvo"}
+                {estaOffline
+                  ? "Offline"
+                  : sincronizando || qtdFilaOffline > 0
+                    ? "Sincronizando"
+                    : aoVivoConectado
+                      ? "Ao vivo"
+                      : "Salvo"}
               </span>
             </div>
           </div>

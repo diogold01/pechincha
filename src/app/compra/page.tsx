@@ -22,6 +22,11 @@ import BottomNav from "@/components/BottomNav";
 import FrequentProductsBar from "@/components/FrequentProductsBar";
 import LiveMarketMode from "@/components/LiveMarketMode";
 import {
+  lerSnapshotModoMercado,
+  processarFilaOffline,
+  salvarSnapshotModoMercado,
+} from "@/lib/offline-sync";
+import {
   LIMITE_ORCAMENTO_ALERTA,
   LIMITE_ORCAMENTO_ESTOURO,
   calcularEstimativaItemCarrinho,
@@ -279,22 +284,41 @@ function CompraPlanejamentoContent() {
           ativos[0]?.id ||
           null;
 
+        let cartIdFinal: string | null = null;
+        let itensFinais: CartItem[] = [];
+
         if (idEscolhido && ativos.some((c) => c.id === idEscolhido)) {
-          setCarrinhoAtualId(idEscolhido);
-          const itensDoCarrinho = listaTodosItens
+          cartIdFinal = idEscolhido;
+          itensFinais = listaTodosItens
             .filter((i) => i.cart_id === idEscolhido)
             .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-          setItensCarrinho(itensDoCarrinho);
         } else if (ativos.length > 0) {
-          setCarrinhoAtualId(ativos[0].id);
-          const itensDoPrimeiro = listaTodosItens
+          cartIdFinal = ativos[0].id;
+          itensFinais = listaTodosItens
             .filter((i) => i.cart_id === ativos[0].id)
             .sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-          setItensCarrinho(itensDoPrimeiro);
-        } else {
-          setCarrinhoAtualId(null);
-          setItensCarrinho([]);
         }
+
+        setCarrinhoAtualId(cartIdFinal);
+        setItensCarrinho(itensFinais);
+
+        // Salva cópia local resiliente (IndexedDB + localStorage) para o Modo Mercado funcionar sem sinal (Seção 9)
+        await salvarSnapshotModoMercado({
+          groupId: gId,
+          userId: user.id,
+          grupo: grp,
+          settings: st,
+          mercados: mkts,
+          setores: secs,
+          ordemSetoresMercado: (ordData as MarketSectorOrder[]) || [],
+          produtos: prods,
+          precos: prcs,
+          carrinhosAtivos: ativos,
+          carrinhoAtualId: cartIdFinal,
+          itensCarrinho: itensFinais,
+          gastoMesPorSetorEntries: Array.from(mapaGastoMes.entries()),
+          atualizadoEm: new Date().toISOString(),
+        });
 
         if (abrirNovoParam) {
           const padraoMkt =
@@ -308,13 +332,72 @@ function CompraPlanejamentoContent() {
           setSheetCarrinhoAberto(true);
         }
       } catch {
-        setErro("Erro ao carregar o planejamento de compras.");
+        // Se estiver sem internet no mercado, restaura automaticamente o último estado salvo no aparelho
+        const snapshot = await lerSnapshotModoMercado();
+        if (snapshot) {
+          setGroupId(snapshot.groupId);
+          setUserId(snapshot.userId);
+          setGrupo(snapshot.grupo);
+          setSettings(snapshot.settings);
+          setMercados(snapshot.mercados);
+          setSetores(snapshot.setores);
+          setOrdemSetoresMercado(snapshot.ordemSetoresMercado);
+          setProdutos(snapshot.produtos);
+          setPrecos(snapshot.precos);
+          setCarrinhosAtivos(snapshot.carrinhosAtivos);
+          setCarrinhoAtualId(snapshot.carrinhoAtualId);
+          setItensCarrinho(snapshot.itensCarrinho);
+          setGastoMesPorSetor(new Map(snapshot.gastoMesPorSetorEntries));
+        } else {
+          setErro("Erro ao carregar o planejamento de compras.");
+        }
       } finally {
         setCarregando(false);
       }
     },
     [router, cartIdParam, carrinhoAtualId, abrirNovoParam]
   );
+
+  // Mantém o snapshot offline atualizado a cada alteração otimista nos itens ou no carrinho
+  useEffect(() => {
+    if (!groupId || carregando) return;
+    salvarSnapshotModoMercado({
+      groupId,
+      userId,
+      grupo,
+      settings,
+      mercados,
+      setores,
+      ordemSetoresMercado,
+      produtos,
+      precos,
+      carrinhosAtivos,
+      carrinhoAtualId,
+      itensCarrinho,
+      gastoMesPorSetorEntries: Array.from(gastoMesPorSetor.entries()),
+      atualizadoEm: new Date().toISOString(),
+    });
+  }, [
+    groupId,
+    userId,
+    grupo,
+    settings,
+    mercados,
+    setores,
+    ordemSetoresMercado,
+    produtos,
+    precos,
+    carrinhosAtivos,
+    carrinhoAtualId,
+    itensCarrinho,
+    gastoMesPorSetor,
+    carregando,
+  ]);
+
+  // Processa a fila offline caso o usuário abra a página já com internet após usar offline
+  useEffect(() => {
+    processarFilaOffline().catch(() => {});
+  }, []);
 
   useEffect(() => {
     carregarDados();

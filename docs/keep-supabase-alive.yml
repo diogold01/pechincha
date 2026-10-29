@@ -1,0 +1,41 @@
+name: Manter Supabase Ativo (Keep-Alive Diario)
+
+on:
+  schedule:
+    # Executa todos os dias às 09:15 UTC (06:15 no horário de Brasília / 05:15 em Cuiabá)
+    - cron: "15 9 * * *"
+  workflow_dispatch: # Permite testar manualmente com 1 clique na aba Actions do GitHub
+
+jobs:
+  ping-supabase:
+    name: Consulta simples ao Supabase
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar banco Supabase ou rota /api/keep-alive
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            echo "Executando consulta direta ao Supabase..."
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X POST "${SUPABASE_URL}/rest/v1/rpc/check_registration_status" \
+              -H "apikey: ${SUPABASE_ANON_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "{}")
+            echo "Status HTTP retornado pelo Supabase: $HTTP_STATUS"
+            if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+              echo "Supabase mantido ativo com sucesso!"
+              exit 0
+            else
+              echo "Erro ao consultar Supabase (HTTP $HTTP_STATUS)"
+              exit 1
+            fi
+          elif [ -n "$APP_URL" ]; then
+            echo "Consultando endpoint /api/keep-alive da aplicacao..."
+            curl -f -s "${APP_URL%/}/api/keep-alive"
+          else
+            echo "Aviso: Configure SUPABASE_URL e SUPABASE_ANON_KEY (ou APP_URL) em Settings -> Secrets and variables -> Actions no repositorio GitHub."
+            exit 0
+          fi

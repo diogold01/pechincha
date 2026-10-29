@@ -46,7 +46,12 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute =
     pathname.startsWith("/login") ||
     pathname.startsWith("/convite") ||
-    pathname.startsWith("/auth");
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api/keep-alive") ||
+    pathname.startsWith("/manifest") ||
+    pathname.startsWith("/sw.js") ||
+    pathname.startsWith("/icon") ||
+    pathname.startsWith("/apple-icon");
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
