@@ -382,16 +382,18 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_has_groups boolean;
-  v_invite record;
+  v_has_groups boolean := false;
+  v_invite_id uuid := NULL;
+  v_group_name text := NULL;
+  v_restricted_email text := NULL;
   v_clean_code text;
 BEGIN
   SELECT EXISTS (SELECT 1 FROM public.groups LIMIT 1) INTO v_has_groups;
 
   IF p_invite_code IS NOT NULL AND char_length(trim(p_invite_code)) > 0 THEN
     v_clean_code := upper(trim(p_invite_code));
-    SELECT gi.id, gi.group_id, gi.email, g.nome AS group_name
-    INTO v_invite
+    SELECT gi.id, g.nome, gi.email
+    INTO v_invite_id, v_group_name, v_restricted_email
     FROM public.group_invites gi
     JOIN public.groups g ON g.id = gi.group_id
     WHERE upper(trim(gi.codigo)) = v_clean_code
@@ -401,9 +403,9 @@ BEGIN
 
   RETURN jsonb_build_object(
     'needs_invite', v_has_groups,
-    'invite_valid', (v_invite.id IS NOT NULL),
-    'group_name', COALESCE(v_invite.group_name, NULL),
-    'restricted_email', COALESCE(v_invite.email, NULL)
+    'invite_valid', (v_invite_id IS NOT NULL),
+    'group_name', v_group_name,
+    'restricted_email', v_restricted_email
   );
 END;
 $$;
@@ -554,7 +556,11 @@ AS $$
 DECLARE
   v_user_id uuid;
   v_user_email text;
-  v_invite record;
+  v_invite_id uuid;
+  v_group_id uuid;
+  v_invite_email text;
+  v_usado_em timestamptz;
+  v_group_name text;
   v_clean_code text;
 BEGIN
   v_user_id := auth.uid();
@@ -568,33 +574,33 @@ BEGIN
   END IF;
 
   -- Busca e bloqueia a linha do convite para evitar uso simultâneo
-  SELECT gi.*, g.nome AS group_name
-  INTO v_invite
+  SELECT gi.id, gi.group_id, gi.email, gi.usado_em, g.nome
+  INTO v_invite_id, v_group_id, v_invite_email, v_usado_em, v_group_name
   FROM public.group_invites gi
   JOIN public.groups g ON g.id = gi.group_id
   WHERE upper(trim(gi.codigo)) = v_clean_code
   FOR UPDATE OF gi;
 
-  IF v_invite.id IS NULL THEN
+  IF NOT FOUND OR v_invite_id IS NULL THEN
     RAISE EXCEPTION 'Código de convite não encontrado. Verifique se digitou corretamente.';
   END IF;
 
-  IF v_invite.usado_em IS NOT NULL THEN
+  IF v_usado_em IS NOT NULL THEN
     RAISE EXCEPTION 'Este convite já foi utilizado.';
   END IF;
 
   -- Se o convite foi restrito a um e-mail específico, confere o e-mail do usuário logado
-  IF v_invite.email IS NOT NULL THEN
+  IF v_invite_email IS NOT NULL THEN
     v_user_email := lower(trim(COALESCE(auth.jwt() ->> 'email', '')));
-    IF v_user_email <> lower(trim(v_invite.email)) THEN
-      RAISE EXCEPTION 'Este convite foi emitido exclusivamente para o e-mail %.', v_invite.email;
+    IF v_user_email <> lower(trim(v_invite_email)) THEN
+      RAISE EXCEPTION 'Este convite foi emitido exclusivamente para o e-mail %.', v_invite_email;
     END IF;
   END IF;
 
   -- Adiciona o usuário ao grupo (se já estiver no grupo, não duplica)
   INSERT INTO public.group_members (group_id, user_id, papel, nome_exibicao)
   VALUES (
-    v_invite.group_id,
+    v_group_id,
     v_user_id,
     'membro',
     NULLIF(trim(COALESCE(p_nome_exibicao, '')), '')
@@ -605,11 +611,11 @@ BEGIN
   UPDATE public.group_invites
   SET usado_em = now(),
       usado_por = v_user_id
-  WHERE id = v_invite.id;
+  WHERE id = v_invite_id;
 
   RETURN jsonb_build_object(
-    'group_id', v_invite.group_id,
-    'group_name', v_invite.group_name
+    'group_id', v_group_id,
+    'group_name', v_group_name
   );
 END;
 $$;
