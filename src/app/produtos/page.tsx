@@ -1052,8 +1052,13 @@ export default function ProdutosPage() {
                     type="text"
                     value={emojiProduto}
                     onChange={(e) => setEmojiProduto(e.target.value)}
-                    placeholder="📦"
-                    className="w-full h-12 text-center rounded-xl bg-background border border-border text-lg focus:outline-none focus:border-primary"
+                    onFocus={(e) => e.target.select()}
+                    placeholder={
+                      (setorProdutoId &&
+                        mapaSetores.get(setorProdutoId)?.emoji) ||
+                      "📦"
+                    }
+                    className="w-full h-12 text-center rounded-xl bg-background border border-border text-lg focus:outline-none focus:border-primary focus:placeholder-transparent"
                   />
                 </div>
                 <div className="flex-1 flex flex-col gap-1.5">

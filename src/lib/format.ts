@@ -1,5 +1,9 @@
 import type { MetodoPreco, Price } from "./types";
 
+// Limites de cor do orçamento (Seção 6 — reservados exclusivamente ao orçamento)
+export const LIMITE_ORCAMENTO_ALERTA = 0.8; // 80% -> amarelo
+export const LIMITE_ORCAMENTO_ESTOURO = 1.0; // 100% -> vermelho
+
 /**
  * Formata um número para moeda brasileira: R$ 1.234,56
  */
@@ -278,4 +282,142 @@ export function calcularEstatisticasPreco(
     menorPorMercado,
     menorPorMarca,
   };
+}
+
+export interface EstimativaItemCarrinho {
+  precoUnitarioEstimado: number | null;
+  precoVarejoReferencia: number | null;
+  subtotalEstimado: number;
+  atacadoAplicado: boolean;
+  quantidadeMinimaAtacado: number | null;
+  economiaAtacadoTotal: number;
+  desatualizado: boolean;
+  usouOutroMercado: boolean;
+  usouProdutoGeralSemMarca: boolean;
+  dicaAtacadoDisponivel: {
+    quantidadeMinima: number;
+    precoAtacado: number;
+  } | null;
+}
+
+/**
+ * Calcula o preço estimado de um item dentro do carrinho (Seção 6):
+ * - Respeita o método do grupo (média dos últimos N meses, último ou menor), mercado do carrinho e marca escolhida.
+ * - Se a quantidade atingir a quantidade mínima de atacado, aplica o preço de atacado e calcula a economia.
+ */
+export function calcularEstimativaItemCarrinho(
+  precosDoProduto: Price[],
+  quantidade: number,
+  opcoes?: {
+    metodo?: MetodoPreco;
+    mesesMedia?: number;
+    marketIdCarrinho?: string | null;
+    marcaItem?: string | null;
+  }
+): EstimativaItemCarrinho {
+  const stats = calcularEstatisticasPreco(precosDoProduto, {
+    metodo: opcoes?.metodo || "media",
+    mesesMedia: opcoes?.mesesMedia || 3,
+    marketIdPreferencial: opcoes?.marketIdCarrinho || null,
+    marcaPreferencial: opcoes?.marcaItem || null,
+  });
+
+  const precoVarejo = stats.estimado;
+  const marketId = opcoes?.marketIdCarrinho || null;
+  const marcaLimpa = opcoes?.marcaItem?.trim().toLowerCase() || null;
+
+  // Filtra preços de atacado priorizando o mercado do carrinho e a marca (se houver)
+  let candidatosAtacado = stats.precosAtacado;
+  if (marcaLimpa) {
+    const daMarca = candidatosAtacado.filter(
+      (p) => (p.marca || "").trim().toLowerCase() === marcaLimpa
+    );
+    if (daMarca.length > 0) candidatosAtacado = daMarca;
+  }
+  if (marketId) {
+    const doMercado = candidatosAtacado.filter((p) => p.market_id === marketId);
+    if (doMercado.length > 0) candidatosAtacado = doMercado;
+  }
+
+  // Registro de atacado mais recente
+  const melhorAtacado = candidatosAtacado[0] || null;
+  let dicaAtacadoDisponivel: {
+    quantidadeMinima: number;
+    precoAtacado: number;
+  } | null = null;
+
+  if (melhorAtacado) {
+    const qtdMin = Number(melhorAtacado.quantidade_minima) || 2;
+    const valAtacado = Number(melhorAtacado.valor);
+    dicaAtacadoDisponivel = {
+      quantidadeMinima: qtdMin,
+      precoAtacado: valAtacado,
+    };
+
+    // Verifica se a quantidade atingiu o mínimo do atacado
+    if (
+      quantidade >= qtdMin &&
+      (precoVarejo === null || valAtacado < precoVarejo)
+    ) {
+      const economiaTotal =
+        precoVarejo !== null && precoVarejo > valAtacado
+          ? (precoVarejo - valAtacado) * quantidade
+          : 0;
+
+      return {
+        precoUnitarioEstimado: valAtacado,
+        precoVarejoReferencia: precoVarejo,
+        subtotalEstimado: valAtacado * quantidade,
+        atacadoAplicado: true,
+        quantidadeMinimaAtacado: qtdMin,
+        economiaAtacadoTotal: economiaTotal,
+        desatualizado: stats.desatualizado,
+        usouOutroMercado: stats.usouOutroMercado,
+        usouProdutoGeralSemMarca: stats.usouProdutoGeralSemMarca,
+        dicaAtacadoDisponivel,
+      };
+    }
+  }
+
+  const unitarioFinal = precoVarejo;
+  return {
+    precoUnitarioEstimado: unitarioFinal,
+    precoVarejoReferencia: precoVarejo,
+    subtotalEstimado: unitarioFinal !== null ? unitarioFinal * quantidade : 0,
+    atacadoAplicado: false,
+    quantidadeMinimaAtacado: null,
+    economiaAtacadoTotal: 0,
+    desatualizado: stats.desatualizado,
+    usouOutroMercado: stats.usouOutroMercado,
+    usouProdutoGeralSemMarca: stats.usouProdutoGeralSemMarca,
+    dicaAtacadoDisponivel,
+  };
+}
+
+/**
+ * Verifica se uma data/hora ISO pertence ao mês atual no fuso horário do grupo
+ */
+export function pertenceAoMesAtualNoFuso(
+  dataIsoOuDate: string | null | undefined,
+  fusoHorario: string = "America/Cuiaba"
+): boolean {
+  if (!dataIsoOuDate) return false;
+  try {
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      timeZone: fusoHorario || "America/Cuiaba",
+    });
+    const mesAtual = fmt.format(new Date()); // Ex: "2026-10"
+    const dataAlvo = new Date(dataIsoOuDate);
+    if (Number.isNaN(dataAlvo.getTime())) return false;
+    const mesAlvo = fmt.format(dataAlvo);
+    return mesAtual === mesAlvo;
+  } catch {
+    const hoje = new Date();
+    const d = new Date(dataIsoOuDate);
+    return (
+      d.getFullYear() === hoje.getFullYear() && d.getMonth() === hoje.getMonth()
+    );
+  }
 }

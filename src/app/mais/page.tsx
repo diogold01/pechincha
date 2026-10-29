@@ -701,7 +701,9 @@ export default function MaisPage() {
                     type="text"
                     value={emojiSetor}
                     onChange={(e) => setEmojiSetor(e.target.value)}
-                    className="w-full h-12 text-center rounded-xl bg-background border border-border text-lg focus:outline-none focus:border-primary"
+                    onFocus={(e) => setEmojiSetor("")}
+                    placeholder="🛒"
+                    className="w-full h-12 text-center rounded-xl bg-background border border-border text-lg focus:outline-none focus:border-primary focus:placeholder-transparent"
                   />
                 </div>
                 <div className="flex-1 flex flex-col gap-1.5">
