@@ -44,3 +44,7 @@ next-env.d.ts
 *.sln
 *.sw?
 Thumbs.db
+
+# Tokens locais temporários
+*token*.txt
+.git-token
