@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Users,
@@ -10,12 +11,14 @@ import {
   LogOut,
   ShieldCheck,
   Trash2,
+  Plus,
+  ArrowRight,
 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
 import GroupOnboarding from "@/components/GroupOnboarding";
 import BottomNav from "@/components/BottomNav";
-import type { Group, GroupInvite, GroupMember, Sector } from "@/lib/types";
+import type { Cart, Group, GroupInvite, GroupMember, Sector } from "@/lib/types";
 
 export default function HomePage() {
   const router = useRouter();
@@ -28,6 +31,8 @@ export default function HomePage() {
   const [membros, setMembros] = useState<GroupMember[]>([]);
   const [convites, setConvites] = useState<GroupInvite[]>([]);
   const [setores, setSetores] = useState<Sector[]>([]);
+  const [carrinhoAtivo, setCarrinhoAtivo] = useState<Cart | null>(null);
+  const [qtdItensAtivo, setQtdItensAtivo] = useState<number>(0);
 
   const [gerandoConvite, setGerandoConvite] = useState(false);
   const [copiadoTexto, setCopiadoTexto] = useState<string | null>(null);
@@ -79,6 +84,7 @@ export default function HomePage() {
         { data: allMembers },
         { data: invitesData },
         { data: sectorsData },
+        { data: activeCartsData },
       ] = await Promise.all([
         supabase.from("groups").select("*").eq("id", groupId).single(),
         supabase
@@ -97,12 +103,31 @@ export default function HomePage() {
           .select("*")
           .eq("group_id", groupId)
           .order("ordem", { ascending: true }),
+        supabase
+          .from("carts")
+          .select("*")
+          .eq("group_id", groupId)
+          .in("status", ["planejado", "em_compra"])
+          .order("criado_em", { ascending: false })
+          .limit(1),
       ]);
 
       setGrupo((groupData as Group) || null);
       setMembros((allMembers as GroupMember[]) || []);
       setConvites((invitesData as GroupInvite[]) || []);
       setSetores((sectorsData as Sector[]) || []);
+
+      const ativo = (activeCartsData as Cart[])?.[0] || null;
+      setCarrinhoAtivo(ativo);
+      if (ativo) {
+        const { count } = await supabase
+          .from("cart_items")
+          .select("*", { count: "exact", head: true })
+          .eq("cart_id", ativo.id);
+        setQtdItensAtivo(count || 0);
+      } else {
+        setQtdItensAtivo(0);
+      }
     } catch {
       // Silencioso em caso de falha de rede
     } finally {
@@ -227,6 +252,39 @@ export default function HomePage() {
             <span>Sair</span>
           </button>
         </div>
+
+        {/* Card Continuar Compra (quando houver uma planejada ou em andamento) */}
+        {carrinhoAtivo && (
+          <Link
+            href={`/compra?id=${carrinhoAtivo.id}`}
+            className="block bg-primary text-white rounded-card p-4 sm:p-5 shadow-sm"
+          >
+            <div className="text-xs font-semibold text-primary-soft">
+              {carrinhoAtivo.status === "em_compra"
+                ? "Compra em andamento"
+                : "Carrinho em planejamento"}
+            </div>
+            <div className="text-xl font-extrabold mt-1">
+              {carrinhoAtivo.nome}
+            </div>
+            <div className="text-[13px] text-primary-soft mt-0.5">
+              {qtdItensAtivo} {qtdItensAtivo === 1 ? "item" : "itens"} na lista
+            </div>
+            <div className="mt-3.5 h-12 rounded-btn bg-white text-primary font-extrabold text-[15px] flex items-center justify-center gap-2">
+              <span>Continuar compra</span>
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </Link>
+        )}
+
+        {/* Botão Nova Compra conforme 1-inicio.html */}
+        <Link
+          href="/compra?nova=1"
+          className="h-12 rounded-btn border-2 border-primary text-primary font-bold text-[15px] bg-card hover:bg-primary-light/40 flex items-center justify-center gap-2 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Nova compra</span>
+        </Link>
 
         {/* Card de Grupo e Convite para a segunda pessoa (Etapa 2) */}
         <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
