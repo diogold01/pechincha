@@ -109,6 +109,8 @@ function CompraPlanejamentoContent() {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [forcarPlanejamento, setForcarPlanejamento] = useState(false);
+  const [aoVivoConectado, setAoVivoConectado] = useState(false);
+  const [pulsoRealtime, setPulsoRealtime] = useState(false);
 
   const carregarDados = useCallback(
     async (preferCartId?: string | null) => {
@@ -317,6 +319,172 @@ function CompraPlanejamentoContent() {
   useEffect(() => {
     carregarDados();
   }, [carregarDados]);
+
+  // Sincronização ao vivo a dois (Supabase Realtime — Etapa 7)
+  // Em caso de conflito, vale a última alteração por item recebida do banco.
+  useEffect(() => {
+    if (!groupId) return;
+    const supabase = createClient();
+
+    function dispararPulso() {
+      setPulsoRealtime(true);
+      setTimeout(() => setPulsoRealtime(false), 1800);
+    }
+
+    const canal = supabase
+      .channel(`compra-ao-vivo-${groupId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "cart_items",
+          filter: `group_id=eq.${groupId}`,
+        },
+        async (payload) => {
+          dispararPulso();
+
+          if (payload.eventType === "INSERT") {
+            const novoItem = payload.new as CartItem;
+            if (novoItem.cart_id !== carrinhoAtualId) return;
+
+            // Se o produto foi recém-cadastrado pelo parceiro, garante que ele está no estado local de produtos
+            setProdutos((prodsAtuais) => {
+              if (!prodsAtuais.some((p) => p.id === novoItem.product_id)) {
+                supabase
+                  .from("products")
+                  .select("*")
+                  .eq("id", novoItem.product_id)
+                  .single()
+                  .then(({ data }) => {
+                    if (data) {
+                      setProdutos((prev) =>
+                        prev.some((x) => x.id === (data as Product).id)
+                          ? prev
+                          : [...prev, data as Product]
+                      );
+                    }
+                  });
+              }
+              return prodsAtuais;
+            });
+
+            setItensCarrinho((prev) => {
+              // Se já existe pelo id real, atualiza
+              if (prev.some((x) => x.id === novoItem.id)) {
+                return prev.map((x) => (x.id === novoItem.id ? novoItem : x));
+              }
+              // Se havia um item otimista temporário para o mesmo produto, substitui pelo definitivo
+              const idxTemp = prev.findIndex(
+                (x) =>
+                  x.id.startsWith("temp-") &&
+                  x.product_id === novoItem.product_id
+              );
+              if (idxTemp !== -1) {
+                const copia = [...prev];
+                copia[idxTemp] = novoItem;
+                return copia;
+              }
+              return [...prev, novoItem].sort(
+                (a, b) => (a.ordem || 0) - (b.ordem || 0)
+              );
+            });
+          } else if (payload.eventType === "UPDATE") {
+            const itemAtualizado = payload.new as CartItem;
+            if (itemAtualizado.cart_id !== carrinhoAtualId) return;
+            setItensCarrinho((prev) =>
+              prev.map((x) =>
+                x.id === itemAtualizado.id ? itemAtualizado : x
+              )
+            );
+          } else if (payload.eventType === "DELETE") {
+            const idRemovido = (payload.old as { id?: string })?.id;
+            if (!idRemovido) return;
+            setItensCarrinho((prev) =>
+              prev.filter((x) => x.id !== idRemovido)
+            );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "carts",
+          filter: `group_id=eq.${groupId}`,
+        },
+        (payload) => {
+          dispararPulso();
+
+          if (payload.eventType === "INSERT") {
+            const novoCart = payload.new as Cart;
+            if (
+              novoCart.status === "planejado" ||
+              novoCart.status === "em_compra"
+            ) {
+              setCarrinhosAtivos((prev) =>
+                prev.some((c) => c.id === novoCart.id)
+                  ? prev
+                  : [novoCart, ...prev]
+              );
+              if (!carrinhoAtualId) {
+                setCarrinhoAtualId(novoCart.id);
+              }
+            }
+          } else if (payload.eventType === "UPDATE") {
+            const cartAtualizado = payload.new as Cart;
+            if (cartAtualizado.status === "finalizado") {
+              setCarrinhosAtivos((prev) =>
+                prev.filter((c) => c.id !== cartAtualizado.id)
+              );
+              if (carrinhoAtualId === cartAtualizado.id) {
+                router.push("/");
+              }
+            } else {
+              setCarrinhosAtivos((prev) =>
+                prev.map((c) =>
+                  c.id === cartAtualizado.id ? cartAtualizado : c
+                )
+              );
+            }
+          } else if (payload.eventType === "DELETE") {
+            const idRemovido = (payload.old as { id?: string })?.id;
+            if (!idRemovido) return;
+            setCarrinhosAtivos((prev) =>
+              prev.filter((c) => c.id !== idRemovido)
+            );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "market_sector_order",
+          filter: `group_id=eq.${groupId}`,
+        },
+        () => {
+          supabase
+            .from("market_sector_order")
+            .select("*")
+            .eq("group_id", groupId)
+            .then(({ data }) => {
+              if (data) {
+                setOrdemSetoresMercado(data as MarketSectorOrder[]);
+              }
+            });
+        }
+      )
+      .subscribe((status) => {
+        setAoVivoConectado(status === "SUBSCRIBED");
+      });
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, [groupId, carrinhoAtualId, router]);
 
   const carrinhoAtual = useMemo(
     () => carrinhosAtivos.find((c) => c.id === carrinhoAtualId) || null,
@@ -995,6 +1163,8 @@ function CompraPlanejamentoContent() {
         settings={settings}
         ordemSetoresMercado={ordemSetoresMercado}
         gastoMesPorSetor={gastoMesPorSetor}
+        aoVivoConectado={aoVivoConectado}
+        pulsoRealtime={pulsoRealtime}
         onReload={carregarDados}
         onVoltarPlanejamento={() => setForcarPlanejamento(true)}
       />
@@ -1007,8 +1177,18 @@ function CompraPlanejamentoContent() {
         {/* Topo: Seletor de Carrinho e Botão Novo Carrinho */}
         <div className="flex items-center justify-between gap-2">
           <div>
-            <div className="text-[13px] text-text-muted font-medium">
-              Planejamento de Compra
+            <div className="text-[13px] text-text-muted font-medium flex items-center gap-2">
+              <span>Planejamento de Compra</span>
+              {aoVivoConectado && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-light text-primary-hover text-[11px] font-bold">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full bg-primary ${
+                      pulsoRealtime ? "animate-ping" : ""
+                    }`}
+                  />
+                  <span>Ao vivo</span>
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <h1 className="text-[24px] font-extrabold leading-tight truncate">

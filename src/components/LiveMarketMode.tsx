@@ -64,6 +64,8 @@ interface LiveMarketModeProps {
   settings: GroupSettings | null;
   ordemSetoresMercado: MarketSectorOrder[];
   gastoMesPorSetor: Map<string, number>;
+  aoVivoConectado?: boolean;
+  pulsoRealtime?: boolean;
   onReload: (cartId?: string | null) => Promise<void>;
   onVoltarPlanejamento: () => void;
 }
@@ -81,6 +83,8 @@ export default function LiveMarketMode({
   settings,
   ordemSetoresMercado,
   gastoMesPorSetor,
+  aoVivoConectado = false,
+  pulsoRealtime = false,
   onReload,
   onVoltarPlanejamento,
 }: LiveMarketModeProps) {
@@ -961,15 +965,23 @@ export default function LiveMarketMode({
               <ChevronDown className="w-4 h-4 text-text-muted shrink-0" />
             </button>
 
-            <div className="w-16 flex items-center justify-end gap-1.5 text-xs font-semibold text-text-muted shrink-0">
+            <div className="w-20 flex items-center justify-end gap-1.5 text-xs font-semibold text-text-muted shrink-0">
               <span
                 className={`w-2 h-2 rounded-full ${
-                  sincronizando
-                    ? "bg-budget-yellow animate-ping"
-                    : "bg-primary"
+                  sincronizando || pulsoRealtime
+                    ? "bg-primary animate-ping"
+                    : aoVivoConectado
+                      ? "bg-primary"
+                      : "bg-text-muted"
                 }`}
               />
-              <span>{sincronizando ? "Salvando" : "Salvo"}</span>
+              <span>
+                {sincronizando
+                  ? "Salvando"
+                  : aoVivoConectado
+                    ? "Ao vivo"
+                    : "Salvo"}
+              </span>
             </div>
           </div>
 

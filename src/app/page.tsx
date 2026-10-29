@@ -17,7 +17,9 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
 import GroupOnboarding from "@/components/GroupOnboarding";
 import BottomNav from "@/components/BottomNav";
+import { repetirCarrinhoNoBanco } from "@/lib/cart-actions";
 import {
+  formatarDataCurtaBR,
   formatarMoeda,
   pertenceAoMesAtualNoFuso,
   LIMITE_ORCAMENTO_ALERTA,
@@ -29,26 +31,41 @@ import type {
   Group,
   GroupInvite,
   GroupMember,
+  Market,
   Product,
   Sector,
 } from "@/lib/types";
+
+interface ResumoCarrinhoFinalizado {
+  cart: Cart;
+  dataCurta: string;
+  qtdItens: number;
+  total: number;
+}
 
 export default function HomePage() {
   const router = useRouter();
   const configurado = isSupabaseConfigured();
 
   const [carregando, setCarregando] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
   const [userName, setUserName] = useState<string>("");
   const [grupo, setGrupo] = useState<Group | null>(null);
   const [membros, setMembros] = useState<GroupMember[]>([]);
   const [convites, setConvites] = useState<GroupInvite[]>([]);
   const [setores, setSetores] = useState<Sector[]>([]);
+  const [mercados, setMercados] = useState<Market[]>([]);
   const [gastoPorSetor, setGastoPorSetor] = useState<Map<string, number>>(
     new Map()
   );
   const [carrinhoAtivo, setCarrinhoAtivo] = useState<Cart | null>(null);
   const [qtdItensAtivo, setQtdItensAtivo] = useState<number>(0);
+  const [qtdMarcadosAtivo, setQtdMarcadosAtivo] = useState<number>(0);
+  const [ultimosCarrinhos, setUltimosCarrinhos] = useState<
+    ResumoCarrinhoFinalizado[]
+  >([]);
+  const [copiandoCartId, setCopiandoCartId] = useState<string | null>(null);
 
   const [gerandoConvite, setGerandoConvite] = useState(false);
   const [copiadoTexto, setCopiadoTexto] = useState<string | null>(null);
@@ -72,6 +89,7 @@ export default function HomePage() {
         return;
       }
 
+      setUserId(user.id);
       setUserEmail(user.email || "");
       setUserName(
         (user.user_metadata?.nome as string) ||
@@ -100,6 +118,7 @@ export default function HomePage() {
         { data: allMembers },
         { data: invitesData },
         { data: sectorsData },
+        { data: marketsData },
         { data: activeCartsData },
         { data: finishedCartsData },
         { data: prodsData },
@@ -122,6 +141,7 @@ export default function HomePage() {
           .select("*")
           .eq("group_id", groupId)
           .order("ordem", { ascending: true }),
+        supabase.from("markets").select("*").eq("group_id", groupId),
         supabase
           .from("carts")
           .select("*")
@@ -133,7 +153,9 @@ export default function HomePage() {
           .from("carts")
           .select("*")
           .eq("group_id", groupId)
-          .eq("status", "finalizado"),
+          .eq("status", "finalizado")
+          .order("finalizado_em", { ascending: false })
+          .order("criado_em", { ascending: false }),
         supabase.from("products").select("id, sector_id").eq("group_id", groupId),
         supabase.from("cart_items").select("*").eq("group_id", groupId),
       ]);
@@ -143,21 +165,52 @@ export default function HomePage() {
       setMembros((allMembers as GroupMember[]) || []);
       setConvites((invitesData as GroupInvite[]) || []);
       setSetores((sectorsData as Sector[]) || []);
+      setMercados((marketsData as Market[]) || []);
 
       const todosItens = (allCartItemsData as CartItem[]) || [];
       const ativo = (activeCartsData as Cart[])?.[0] || null;
       setCarrinhoAtivo(ativo);
       if (ativo) {
-        const qtd = todosItens.filter((i) => i.cart_id === ativo.id).length;
-        setQtdItensAtivo(qtd);
+        const itensAtivo = todosItens.filter((i) => i.cart_id === ativo.id);
+        setQtdItensAtivo(itensAtivo.length);
+        setQtdMarcadosAtivo(itensAtivo.filter((i) => i.marcado).length);
       } else {
         setQtdItensAtivo(0);
+        setQtdMarcadosAtivo(0);
       }
+
+      const listaFinalizados = (finishedCartsData as Cart[]) || [];
+
+      // Monta os últimos carrinhos finalizados para o atalho "Repetir" na tela inicial
+      const resumosRecentes: ResumoCarrinhoFinalizado[] = listaFinalizados
+        .slice(0, 4)
+        .map((c) => {
+          const itensDoC = todosItens.filter(
+            (i) => i.cart_id === c.id && i.marcado !== false
+          );
+          let soma = 0;
+          for (const item of itensDoC) {
+            const unit =
+              item.preco_real !== null && item.preco_real !== undefined
+                ? Number(item.preco_real)
+                : Number(item.preco_estimado || 0);
+            soma += unit * Number(item.quantidade || 0);
+          }
+          return {
+            cart: c,
+            dataCurta: formatarDataCurtaBR(
+              c.finalizado_em || c.data_planejada || c.criado_em
+            ),
+            qtdItens: itensDoC.length,
+            total: soma,
+          };
+        });
+      setUltimosCarrinhos(resumosRecentes);
 
       // Calcula gastos do mês atual por setor para o card de Orçamento da tela inicial
       const fuso = grp?.fuso_horario || "America/Cuiaba";
       const idsFinalizadosMes = new Set(
-        ((finishedCartsData as Cart[]) || [])
+        listaFinalizados
           .filter((c) =>
             pertenceAoMesAtualNoFuso(c.finalizado_em || c.criado_em, fuso)
           )
@@ -195,6 +248,58 @@ export default function HomePage() {
   useEffect(() => {
     carregarDados();
   }, [carregarDados]);
+
+  // Sincronização ao vivo (Supabase Realtime) para atualizar a tela inicial quando o parceiro mexer no carrinho
+  useEffect(() => {
+    if (!configurado || !grupo?.id) return;
+    const supabase = createClient();
+    const canal = supabase
+      .channel(`home-realtime-${grupo.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "carts",
+          filter: `group_id=eq.${grupo.id}`,
+        },
+        () => {
+          carregarDados();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "cart_items",
+          filter: `group_id=eq.${grupo.id}`,
+        },
+        () => {
+          carregarDados();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, [configurado, grupo?.id, carregarDados]);
+
+  async function handleRepetirCarrinho(cartId: string) {
+    if (!grupo || copiandoCartId) return;
+    setCopiandoCartId(cartId);
+    try {
+      const { novoCartId } = await repetirCarrinhoNoBanco({
+        groupId: grupo.id,
+        userId,
+        cartOrigemId: cartId,
+      });
+      router.push(`/compra?id=${novoCartId}`);
+    } catch {
+      setCopiandoCartId(null);
+    }
+  }
 
   if (!configurado) {
     return <SupabaseSetupGuide />;
@@ -434,23 +539,42 @@ export default function HomePage() {
           )}
         </Link>
 
-        {/* Card Continuar Compra (quando houver uma planejada ou em andamento) */}
+        {/* Card Continuar Compra (quando houver uma planejada ou em andamento — fiel a 1-inicio.html) */}
         {carrinhoAtivo && (
           <Link
             href={`/compra?id=${carrinhoAtivo.id}`}
-            className="block bg-primary text-white rounded-card p-4 sm:p-5 shadow-sm"
+            className="block bg-primary text-white rounded-[20px] px-[18px] py-4 shadow-sm"
           >
             <div className="text-xs font-semibold text-primary-soft">
               {carrinhoAtivo.status === "em_compra"
                 ? "Compra em andamento"
                 : "Carrinho em planejamento"}
             </div>
-            <div className="text-xl font-extrabold mt-1">
+            <div className="text-[20px] font-extrabold mt-1">
               {carrinhoAtivo.nome}
             </div>
             <div className="text-[13px] text-primary-soft mt-0.5">
-              {qtdItensAtivo} {qtdItensAtivo === 1 ? "item" : "itens"} na lista
+              {carrinhoAtivo.market_id
+                ? `${mercados.find((m) => m.id === carrinhoAtivo.market_id)?.nome || "Mercado"} · `
+                : ""}
+              {carrinhoAtivo.status === "em_compra"
+                ? `${qtdMarcadosAtivo} de ${qtdItensAtivo} ${qtdItensAtivo === 1 ? "item" : "itens"}`
+                : `${qtdItensAtivo} ${qtdItensAtivo === 1 ? "item" : "itens"} na lista`}
             </div>
+            {qtdItensAtivo > 0 && (
+              <div className="h-[6px] rounded-[3px] bg-white/25 mt-2.5 overflow-hidden">
+                <div
+                  className="h-full bg-white transition-all duration-300"
+                  style={{
+                    width: `${
+                      carrinhoAtivo.status === "em_compra"
+                        ? Math.round((qtdMarcadosAtivo / qtdItensAtivo) * 100)
+                        : 100
+                    }%`,
+                  }}
+                />
+              </div>
+            )}
             <div className="mt-3.5 h-12 rounded-btn bg-white text-primary font-extrabold text-[15px] flex items-center justify-center gap-2">
               <span>Continuar compra</span>
               <ArrowRight className="w-4 h-4" />
@@ -466,6 +590,56 @@ export default function HomePage() {
           <Plus className="w-4 h-4" />
           <span>Nova compra</span>
         </Link>
+
+        {/* Últimos carrinhos com botão "Repetir" (fiel a 1-inicio.html) */}
+        <div className="flex flex-col gap-2.5 mt-0.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[16px] font-extrabold">Últimos carrinhos</h2>
+            <Link
+              href="/historico"
+              className="text-xs font-bold text-primary hover:underline"
+            >
+              Ver histórico
+            </Link>
+          </div>
+
+          {ultimosCarrinhos.length === 0 ? (
+            <div className="bg-card border border-border rounded-[16px] px-3.5 py-3 text-xs text-text-muted">
+              Suas compras finalizadas aparecerão aqui para você repetir a lista
+              com 1 toque.
+            </div>
+          ) : (
+            ultimosCarrinhos.map((resumo) => {
+              const copiando = copiandoCartId === resumo.cart.id;
+              return (
+                <div
+                  key={resumo.cart.id}
+                  className="flex items-center gap-3 bg-card border border-border rounded-[16px] px-[14px] py-[10px]"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-bold truncate">
+                      {resumo.cart.nome}
+                    </div>
+                    <div className="text-[12px] text-text-muted">
+                      {resumo.dataCurta} · {resumo.qtdItens}{" "}
+                      {resumo.qtdItens === 1 ? "item" : "itens"} ·{" "}
+                      {formatarMoeda(resumo.total)}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={copiando}
+                    onClick={() => handleRepetirCarrinho(resumo.cart.id)}
+                    aria-label={`Repetir ${resumo.cart.nome}`}
+                    className="h-11 px-4 rounded-full bg-primary-light text-primary-hover text-[13px] font-bold flex items-center justify-center shrink-0 hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60"
+                  >
+                    {copiando ? "Copiando..." : "Repetir"}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
 
         {/* Card de Grupo e Convite para a segunda pessoa (Etapa 2) */}
         <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
