@@ -9,16 +9,12 @@ import {
   Check,
   LogOut,
   ShieldCheck,
-  Home as HomeIcon,
-  ShoppingCart,
-  Package,
-  PieChart,
-  MoreHorizontal,
   Trash2,
 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
 import GroupOnboarding from "@/components/GroupOnboarding";
+import BottomNav from "@/components/BottomNav";
 import type { Group, GroupInvite, GroupMember, Sector } from "@/lib/types";
 
 export default function HomePage() {
@@ -392,49 +388,7 @@ export default function HomePage() {
         </section>
       </main>
 
-      {/* Barra de navegação inferior com 5 itens (Seção 7) */}
-      <nav
-        aria-label="Navegação principal"
-        className="fixed bottom-0 left-0 right-0 h-20 bg-card border-t border-border flex items-center justify-center z-20"
-      >
-        <div className="w-full max-w-md flex h-full">
-          <button
-            type="button"
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-bold text-primary"
-          >
-            <HomeIcon className="w-6 h-6" />
-            <span>Início</span>
-          </button>
-          <button
-            type="button"
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-text-muted"
-          >
-            <ShoppingCart className="w-6 h-6" />
-            <span>Compra</span>
-          </button>
-          <button
-            type="button"
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-text-muted"
-          >
-            <Package className="w-6 h-6" />
-            <span>Produtos</span>
-          </button>
-          <button
-            type="button"
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-text-muted"
-          >
-            <PieChart className="w-6 h-6" />
-            <span>Orçamento</span>
-          </button>
-          <button
-            type="button"
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-text-muted"
-          >
-            <MoreHorizontal className="w-6 h-6" />
-            <span>Mais</span>
-          </button>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
   );
 }
