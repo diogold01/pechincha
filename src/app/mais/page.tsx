@@ -542,24 +542,35 @@ export default function MaisPage() {
               </div>
             </section>
 
-            {/* 4. ATALHOS DAS PRÓXIMAS ETAPAS */}
+            {/* 4. HISTÓRICO E EXPORTAÇÃO */}
             <section className="bg-card border border-border rounded-card p-4 flex flex-col divide-y divide-border shadow-sm">
-              <div className="flex items-center justify-between py-2.5 px-1 opacity-75">
+              <button
+                type="button"
+                onClick={() => router.push("/historico")}
+                className="flex items-center justify-between py-2.5 px-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
+              >
                 <div className="flex items-center gap-3">
-                  <History className="w-5 h-5 text-text-muted" />
+                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
+                    <History className="w-5 h-5" />
+                  </div>
                   <div>
-                    <div className="text-sm font-bold">
+                    <div className="text-sm font-extrabold text-text-main">
                       Histórico de carrinhos
                     </div>
                     <div className="text-xs text-text-muted">
-                      Disponível na Etapa 7
+                      Ver compras anteriores, gastos por setor e repetir lista
                     </div>
                   </div>
                 </div>
-              </div>
+                <span className="h-9 px-3 rounded-xl bg-primary-light text-primary-hover font-bold text-xs flex items-center justify-center shrink-0">
+                  Abrir
+                </span>
+              </button>
               <div className="flex items-center justify-between py-2.5 px-1 opacity-75">
                 <div className="flex items-center gap-3">
-                  <Download className="w-5 h-5 text-text-muted" />
+                  <div className="w-10 h-10 rounded-xl bg-background text-text-muted flex items-center justify-center shrink-0">
+                    <Download className="w-5 h-5" />
+                  </div>
                   <div>
                     <div className="text-sm font-bold">
                       Exportar CSV e Backup
