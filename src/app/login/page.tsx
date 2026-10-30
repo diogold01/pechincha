@@ -175,11 +175,17 @@ function LoginContent() {
         return;
       }
 
+      const redirectUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}${codigoConvite.trim() ? `/login?convite=${encodeURIComponent(codigoConvite.trim())}` : ""}`
+          : undefined;
+
       const { data: signUpData, error: signUpError } =
         await supabase.auth.signUp({
           email: emailLimpo,
           password: senha,
           options: {
+            emailRedirectTo: redirectUrl,
             data: {
               nome: nome.trim() || emailLimpo.split("@")[0],
             },
