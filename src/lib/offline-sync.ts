@@ -42,6 +42,7 @@ export type TipoOperacaoOffline =
   | "DELETE_CART_ITEM"
   | "UPSERT_PRICE_POR_ITEM"
   | "UPDATE_CART"
+  | "UPDATE_PRODUCT"
   | "REORDER_SECTORS";
 
 export interface OperacaoOffline {
@@ -260,6 +261,19 @@ export async function enfileirarOperacaoOffline(
       await persistirFilaOffline(fila);
       return fila.length;
     }
+  } else if (novaOp.tipo === "UPDATE_PRODUCT") {
+    const idxProd = fila.findIndex(
+      (op) => op.tipo === "UPDATE_PRODUCT" && op.alvoId === novaOp.alvoId
+    );
+    if (idxProd !== -1) {
+      fila[idxProd] = {
+        ...fila[idxProd],
+        dados: { ...fila[idxProd].dados, ...novaOp.dados },
+        criadoEm: agora,
+      };
+      await persistirFilaOffline(fila);
+      return fila.length;
+    }
   }
 
   fila.push({
@@ -293,55 +307,78 @@ export async function processarFilaOffline(): Promise<{
   const restantes: OperacaoOffline[] = [];
   let sincronizadas = 0;
 
+  // Mapeia IDs temporários (temp-xxx) para os UUIDs definitivos gerados pelo banco no INSERT
+  const mapaIdsTemporarios = new Map<string, string>();
+
   for (const op of fila) {
     try {
+      const idResolvido = mapaIdsTemporarios.get(op.alvoId) || op.alvoId;
+
       if (op.tipo === "UPDATE_CART_ITEM") {
-        if (op.alvoId.startsWith("temp-")) {
-          // Item temporário já será tratado no INSERT
+        if (idResolvido.startsWith("temp-")) {
+          // Item temporário já mesclado ou sem INSERT correspondente
           sincronizadas++;
           continue;
         }
         const { error } = await supabase
           .from("cart_items")
           .update(op.dados)
-          .eq("id", op.alvoId);
+          .eq("id", idResolvido);
         if (error) throw error;
         sincronizadas++;
       } else if (op.tipo === "INSERT_CART_ITEM") {
         const payload = { ...op.dados };
         delete payload.id;
-        const { error } = await supabase.from("cart_items").insert(payload);
+        const { data: inserido, error } = await supabase
+          .from("cart_items")
+          .insert(payload)
+          .select("id")
+          .single();
         if (error) throw error;
+        if (inserido?.id && op.alvoId.startsWith("temp-")) {
+          mapaIdsTemporarios.set(op.alvoId, inserido.id);
+        }
         sincronizadas++;
       } else if (op.tipo === "DELETE_CART_ITEM") {
-        const { error } = await supabase
-          .from("cart_items")
-          .delete()
-          .eq("id", op.alvoId);
-        if (error) throw error;
-        sincronizadas++;
-      } else if (op.tipo === "UPSERT_PRICE_POR_ITEM") {
-        const cartItemId = op.alvoId;
-        if (cartItemId.startsWith("temp-")) {
+        if (idResolvido.startsWith("temp-")) {
           sincronizadas++;
           continue;
         }
+        const { error } = await supabase
+          .from("cart_items")
+          .delete()
+          .eq("id", idResolvido);
+        if (error) throw error;
+        sincronizadas++;
+      } else if (op.tipo === "UPSERT_PRICE_POR_ITEM") {
+        if (idResolvido.startsWith("temp-")) {
+          sincronizadas++;
+          continue;
+        }
+        const payloadPreco = { ...op.dados, cart_item_id: idResolvido };
         const { data: existente } = await supabase
           .from("prices")
           .select("id")
-          .eq("cart_item_id", cartItemId)
+          .eq("cart_item_id", idResolvido)
           .maybeSingle();
 
         if (existente?.id) {
           const { error } = await supabase
             .from("prices")
-            .update(op.dados)
+            .update(payloadPreco)
             .eq("id", existente.id);
           if (error) throw error;
         } else {
-          const { error } = await supabase.from("prices").insert(op.dados);
+          const { error } = await supabase.from("prices").insert(payloadPreco);
           if (error) throw error;
         }
+        sincronizadas++;
+      } else if (op.tipo === "UPDATE_PRODUCT") {
+        const { error } = await supabase
+          .from("products")
+          .update(op.dados)
+          .eq("id", idResolvido);
+        if (error) throw error;
         sincronizadas++;
       } else if (op.tipo === "UPDATE_CART") {
         const { error } = await supabase

@@ -272,24 +272,34 @@ export default function ProdutosPage() {
     setErro(null);
     try {
       const supabase = createClient();
+      const nomeLimpo = nomeProduto.trim();
 
-      if (produtoEditando) {
+      // Garante operação estrita de UPDATE se estiver editando OU se já existir produto com mesmo nome
+      const alvoUpdate =
+        produtoEditando ||
+        produtos.find(
+          (p) => p.nome.trim().toLowerCase() === nomeLimpo.toLowerCase()
+        ) ||
+        null;
+
+      if (alvoUpdate) {
         const { error } = await supabase
           .from("products")
           .update({
-            nome: nomeProduto.trim(),
+            nome: nomeLimpo,
             sector_id: setorProdutoId || null,
             unidade: unidadeProduto,
             emoji: emojiProduto.trim() || null,
+            ativo: true,
           })
-          .eq("id", produtoEditando.id);
+          .eq("id", alvoUpdate.id);
         if (error) throw error;
       } else {
         const { data: prodCriado, error } = await supabase
           .from("products")
           .insert({
             group_id: groupId,
-            nome: nomeProduto.trim(),
+            nome: nomeLimpo,
             sector_id: setorProdutoId || null,
             unidade: unidadeProduto,
             emoji: emojiProduto.trim() || null,
@@ -341,6 +351,7 @@ export default function ProdutosPage() {
         }
       }
 
+      setProdutoEditando(null);
       setSheetProdutoAberto(false);
       await carregarDados();
     } catch {
