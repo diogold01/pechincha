@@ -1128,7 +1128,7 @@ export default function LiveMarketMode({
       : null;
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-text-main">
+    <div className="min-h-screen flex flex-col bg-background text-text-main w-full max-w-full overflow-x-hidden">
       {/* TOPO FIXO DO MODO MERCADO (Fiel a 2-modo-mercado.html) */}
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b border-border/60">
         <div className="w-full max-w-md mx-auto">
@@ -1225,7 +1225,7 @@ export default function LiveMarketMode({
       </header>
 
       {/* LISTA DE SETORES E ITENS (Com espaço extra pb-44 no fim para o botão "+" nunca cobrir o último item — Seção 7) */}
-      <main className="flex-1 w-full max-w-md mx-auto px-4 pt-3 pb-44 flex flex-col gap-3">
+      <main className="flex-1 w-full max-w-md mx-auto px-4 pt-3 pb-44 flex flex-col gap-3 min-w-0 max-w-full">
         {erro && (
           <div className="bg-budget-red-bg text-budget-red-text px-4 py-2.5 rounded-2xl text-xs font-semibold flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
