@@ -169,6 +169,12 @@ export default function LiveMarketMode({
   const [novoProdUnidade, setNovoProdUnidade] = useState("un");
   const [novoProdPreco, setNovoProdPreco] = useState("");
 
+  // Modal de conflito: Agrupar vs. Separar produto já existente na compra ao vivo
+  const [produtoConflitoAoVivo, setProdutoConflitoAoVivo] =
+    useState<Product | null>(null);
+  const [marcaNovaLinhaAoVivo, setMarcaNovaLinhaAoVivo] = useState("");
+  const [precoNovaLinhaAoVivo, setPrecoNovaLinhaAoVivo] = useState("");
+
   // Bottom Sheet 4: Finalizar Compra com Pagamento Misto
   const [sheetFinalizarAberto, setSheetFinalizarAberto] = useState(false);
   const [pagamentosMistos, setPagamentosMistos] = useState<
@@ -796,47 +802,19 @@ export default function LiveMarketMode({
     return produtos.filter((p) => p.nome.toLowerCase().includes(t)).slice(0, 8);
   }, [produtos, buscaRapida]);
 
-  async function handleAdicionarProdutoRapidoAoVivo(prod: Product) {
-    const existente = itensCarrinho.find((i) => i.product_id === prod.id);
+  async function handleAdicionarProdutoRapidoAoVivo(
+    prod: Product,
+    marcaInicial: string | null = null,
+    precoRealInicial: number | null = null,
+    forcarNovaLinha: boolean = false
+  ) {
+    const existentes = itensCarrinho.filter((i) => i.product_id === prod.id);
     const supabase = createClient();
 
-    if (existente) {
-      const novaQtd = Number(existente.quantidade) + 1;
-      setItensCarrinho((prev) =>
-        prev.map((x) =>
-          x.id === existente.id ? { ...x, quantidade: novaQtd } : x
-        )
-      );
-      setSheetAdicionarAberto(false);
-      setBuscaRapida("");
-
-      if (typeof window !== "undefined" && !window.navigator.onLine) {
-        const totalFila = await enfileirarOperacaoOffline({
-          tipo: "UPDATE_CART_ITEM",
-          alvoId: existente.id,
-          dados: { quantidade: novaQtd },
-        });
-        setQtdFilaOffline(totalFila);
-        return;
-      }
-
-      setSincronizando(true);
-      try {
-        const { error } = await supabase
-          .from("cart_items")
-          .update({ quantidade: novaQtd })
-          .eq("id", existente.id);
-        if (error) throw error;
-      } catch {
-        const totalFila = await enfileirarOperacaoOffline({
-          tipo: "UPDATE_CART_ITEM",
-          alvoId: existente.id,
-          dados: { quantidade: novaQtd },
-        });
-        setQtdFilaOffline(totalFila);
-      } finally {
-        setSincronizando(false);
-      }
+    if (existentes.length > 0 && !forcarNovaLinha) {
+      setProdutoConflitoAoVivo(prod);
+      setMarcaNovaLinhaAoVivo("");
+      setPrecoNovaLinhaAoVivo("");
       return;
     }
 
@@ -845,7 +823,16 @@ export default function LiveMarketMode({
       metodo: settings?.metodo_preco || "media",
       mesesMedia: settings?.meses_media || 3,
       marketIdCarrinho,
+      marcaItem: marcaInicial,
     });
+
+    const precoRealVal =
+      precoRealInicial !== null && precoRealInicial > 0
+        ? precoRealInicial
+        : null;
+    const precoEstimadoVal =
+      precoRealVal !== null ? precoRealVal : calc.precoUnitarioEstimado;
+    const jaMarcado = precoRealVal !== null;
 
     const tempId = `temp-${Date.now()}`;
     const itemOtimista: CartItem = {
@@ -853,11 +840,11 @@ export default function LiveMarketMode({
       cart_id: carrinho.id,
       group_id: groupId,
       product_id: prod.id,
-      marca: null,
+      marca: marcaInicial,
       quantidade: 1,
-      preco_estimado: calc.precoUnitarioEstimado,
-      preco_real: null,
-      marcado: false,
+      preco_estimado: precoEstimadoVal,
+      preco_real: precoRealVal,
+      marcado: jaMarcado,
       atacado_aplicado: calc.atacadoAplicado,
       ordem: itensCarrinho.length + 1,
       atualizado_em: new Date().toISOString(),
@@ -871,10 +858,11 @@ export default function LiveMarketMode({
       cart_id: carrinho.id,
       group_id: groupId,
       product_id: prod.id,
+      marca: marcaInicial,
       quantidade: 1,
-      preco_estimado: calc.precoUnitarioEstimado,
-      preco_real: null,
-      marcado: false,
+      preco_estimado: precoEstimadoVal,
+      preco_real: precoRealVal,
+      marcado: jaMarcado,
       atacado_aplicado: calc.atacadoAplicado,
       ordem: itensCarrinho.length + 1,
     };
@@ -902,6 +890,22 @@ export default function LiveMarketMode({
       setItensCarrinho((prev) =>
         prev.map((x) => (x.id === tempId ? (novoItem as CartItem) : x))
       );
+
+      // Se informou preço real na separação e há mercado ativo, registra no histórico prices
+      if (precoRealVal !== null && marketIdCarrinho) {
+        await supabase.from("prices").insert({
+          group_id: groupId,
+          product_id: prod.id,
+          market_id: marketIdCarrinho,
+          marca: marcaInicial,
+          valor: precoRealVal,
+          tipo: "varejo",
+          quantidade_minima: 1,
+          data: dataHojeISO(),
+          criado_por: userId,
+          cart_item_id: novoItem.id,
+        });
+      }
     } catch {
       const totalFila = await enfileirarOperacaoOffline({
         tipo: "INSERT_CART_ITEM",
@@ -912,6 +916,67 @@ export default function LiveMarketMode({
     } finally {
       setSincronizando(false);
     }
+  }
+
+  async function handleAgruparAoVivoNoItemExistente(itemAlvo: CartItem) {
+    const supabase = createClient();
+    const novaQtd = Number(itemAlvo.quantidade) + 1;
+
+    // Mantém estritamente o preço que já estava no item e apenas soma +1 na quantidade
+    setItensCarrinho((prev) =>
+      prev.map((x) =>
+        x.id === itemAlvo.id ? { ...x, quantidade: novaQtd } : x
+      )
+    );
+    setProdutoConflitoAoVivo(null);
+    setSheetAdicionarAberto(false);
+    setBuscaRapida("");
+
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "UPDATE_CART_ITEM",
+        alvoId: itemAlvo.id,
+        dados: { quantidade: novaQtd },
+      });
+      setQtdFilaOffline(totalFila);
+      return;
+    }
+
+    setSincronizando(true);
+    try {
+      const { error } = await supabase
+        .from("cart_items")
+        .update({ quantidade: novaQtd })
+        .eq("id", itemAlvo.id);
+      if (error) throw error;
+    } catch {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "UPDATE_CART_ITEM",
+        alvoId: itemAlvo.id,
+        dados: { quantidade: novaQtd },
+      });
+      setQtdFilaOffline(totalFila);
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
+  async function handleSepararAoVivoEmNovaLinha(e: React.FormEvent) {
+    e.preventDefault();
+    if (!produtoConflitoAoVivo) return;
+    const prod = produtoConflitoAoVivo;
+    const marcaLimpa = marcaNovaLinhaAoVivo.trim() || null;
+    const precoNum = parseDecimalBR(precoNovaLinhaAoVivo);
+    setProdutoConflitoAoVivo(null);
+    setMarcaNovaLinhaAoVivo("");
+    setPrecoNovaLinhaAoVivo("");
+
+    await handleAdicionarProdutoRapidoAoVivo(
+      prod,
+      marcaLimpa,
+      precoNum > 0 ? precoNum : null,
+      true
+    );
   }
 
   async function handleCriarECadastrarProdutoNoMercado(e: React.FormEvent) {
@@ -2143,6 +2208,121 @@ export default function LiveMarketMode({
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL DE DECISÃO: AGRUPAR VS. SEPARAR PRODUTO JÁ EXISTENTE AO VIVO
+         ===================================================================== */}
+      {produtoConflitoAoVivo && (
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-[2px] flex items-end justify-center">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <h3 className="text-lg font-extrabold text-text-main truncate">
+                  {produtoConflitoAoVivo.nome} já está na compra
+                </h3>
+                <p className="text-xs text-text-muted">
+                  Deseja somar na linha existente ou separar em outra linha?
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProdutoConflitoAoVivo(null)}
+                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-text-muted shrink-0 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Opção 1: Agrupar nas linhas existentes (Mantém o preço original do item) */}
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-extrabold text-text-muted uppercase tracking-wider">
+                Opção 1: Agrupar (manter preço e somar +1)
+              </span>
+              {itensCarrinho
+                .filter((i) => i.product_id === produtoConflitoAoVivo.id)
+                .map((itemEx) => {
+                  const precoExibicao =
+                    itemEx.preco_real !== null
+                      ? formatarMoeda(itemEx.preco_real)
+                      : itemEx.preco_estimado !== null
+                      ? `~${formatarMoeda(itemEx.preco_estimado)}`
+                      : "Sem preço";
+                  return (
+                    <button
+                      key={itemEx.id}
+                      type="button"
+                      onClick={() => handleAgruparAoVivoNoItemExistente(itemEx)}
+                      className="w-full p-3.5 rounded-2xl bg-primary-light/60 hover:bg-primary-light border border-primary/30 flex items-center justify-between text-left cursor-pointer transition-colors"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="text-sm font-extrabold text-primary-hover truncate">
+                          Somar +1 {produtoConflitoAoVivo.unidade} nesta linha
+                        </div>
+                        <div className="text-xs text-text-main font-medium truncate">
+                          Atual:{" "}
+                          {String(Number(itemEx.quantidade)).replace(".", ",")}{" "}
+                          {produtoConflitoAoVivo.unidade}
+                          {itemEx.marca ? ` · ${itemEx.marca}` : " · Sem marca"}{" "}
+                          · {precoExibicao}
+                        </div>
+                      </div>
+                      <span className="h-9 px-3 rounded-xl bg-primary text-white text-xs font-extrabold flex items-center gap-1 shrink-0">
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Agrupar</span>
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+
+            <div className="border-t border-border my-0.5" />
+
+            {/* Opção 2: Separar em nova linha independente (Outro sabor/marca ou preço) */}
+            <form
+              onSubmit={handleSepararAoVivoEmNovaLinha}
+              className="flex flex-col gap-3"
+            >
+              <span className="text-xs font-extrabold text-text-muted uppercase tracking-wider">
+                Opção 2: Separar (criar nova linha independente)
+              </span>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-muted">
+                    Marca ou sabor
+                  </label>
+                  <input
+                    type="text"
+                    value={marcaNovaLinhaAoVivo}
+                    onChange={(e) => setMarcaNovaLinhaAoVivo(e.target.value)}
+                    placeholder="Ex: Tang Uva, Zero..."
+                    className="w-full h-11 px-3 rounded-xl bg-background border border-border text-xs font-semibold text-text-main focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-muted">
+                    Preço na prateleira (R$)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={precoNovaLinhaAoVivo}
+                    onChange={(e) => setPrecoNovaLinhaAoVivo(e.target.value)}
+                    placeholder="0,00"
+                    className="w-full h-11 px-3 rounded-xl bg-background border border-border text-xs font-extrabold text-text-main focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="h-12 rounded-btn bg-card border-2 border-primary text-primary hover:bg-primary-light font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Separar em nova linha</span>
+              </button>
+            </form>
           </div>
         </div>
       )}

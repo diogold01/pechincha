@@ -112,6 +112,12 @@ function CompraPlanejamentoContent() {
   const [emojiProdRapido, setEmojiProdRapido] = useState("");
   const [precoProdRapido, setPrecoProdRapido] = useState("");
 
+  // Modal de conflito: Agrupar vs. Separar produto já existente no carrinho
+  const [produtoConflitoAdicao, setProdutoConflitoAdicao] =
+    useState<Product | null>(null);
+  const [marcaNovaLinhaConflito, setMarcaNovaLinhaConflito] = useState("");
+  const [precoNovaLinhaConflito, setPrecoNovaLinhaConflito] = useState("");
+
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [forcarPlanejamento, setForcarPlanejamento] = useState(false);
@@ -904,7 +910,8 @@ function CompraPlanejamentoContent() {
   async function handleAdicionarProdutoAoCarrinho(
     prod: Product,
     marcaInicial: string | null = null,
-    precoEstInicial: number | null = null
+    precoEstInicial: number | null = null,
+    forcarNovaLinha: boolean = false
   ) {
     if (!groupId) return;
     const supabase = createClient();
@@ -938,52 +945,19 @@ function CompraPlanejamentoContent() {
       setCarrinhoAtualId(c.id);
     }
 
-    // Verifica se o produto já está no carrinho; se estiver, soma +1 na quantidade
-    const existente = itensCarrinho.find((i) => i.product_id === prod.id);
+    // Verifica se o produto já está no carrinho; se estiver, abre o prompt Agrupar vs. Separar
+    const existentes = itensCarrinho.filter((i) => i.product_id === prod.id);
     const listaPrecos = precosPorProduto.get(prod.id) || [];
 
-    if (existente) {
-      const novaQtd = Number(existente.quantidade) + 1;
-      const calc = calcularEstimativaItemCarrinho(listaPrecos, novaQtd, {
-        metodo: settings?.metodo_preco || "media",
-        mesesMedia: settings?.meses_media || 3,
-        marketIdCarrinho: targetMarketId,
-        marcaItem: existente.marca,
-      });
-
-      const novoPrecoEst =
-        calc.precoUnitarioEstimado !== null
-          ? calc.precoUnitarioEstimado
-          : existente.preco_estimado;
-
-      // Atualização otimista
-      setItensCarrinho((prev) =>
-        prev.map((x) =>
-          x.id === existente.id
-            ? {
-                ...x,
-                quantidade: novaQtd,
-                preco_estimado: novoPrecoEst,
-                atacado_aplicado: calc.atacadoAplicado,
-              }
-            : x
-        )
-      );
-
-      await supabase
-        .from("cart_items")
-        .update({
-          quantidade: novaQtd,
-          preco_estimado: novoPrecoEst,
-          atacado_aplicado: calc.atacadoAplicado,
-        })
-        .eq("id", existente.id);
-
+    if (existentes.length > 0 && !forcarNovaLinha) {
+      setProdutoConflitoAdicao(prod);
+      setMarcaNovaLinhaConflito("");
+      setPrecoNovaLinhaConflito("");
       setBuscaProduto("");
       return;
     }
 
-    // Insere novo item no carrinho
+    // Insere novo item (ou nova linha separada) no carrinho
     const calc = calcularEstimativaItemCarrinho(listaPrecos, 1, {
       metodo: settings?.metodo_preco || "media",
       mesesMedia: settings?.meses_media || 3,
@@ -1016,6 +990,42 @@ function CompraPlanejamentoContent() {
       setItensCarrinho((prev) => [...prev, itemCriado as CartItem]);
     }
     setBuscaProduto("");
+  }
+
+  async function handleAgruparNoItemExistente(itemAlvo: CartItem) {
+    const supabase = createClient();
+    const novaQtd = Number(itemAlvo.quantidade) + 1;
+
+    // Mantém estritamente o preço que já estava no item e apenas soma +1 na quantidade
+    setItensCarrinho((prev) =>
+      prev.map((x) =>
+        x.id === itemAlvo.id ? { ...x, quantidade: novaQtd } : x
+      )
+    );
+    setProdutoConflitoAdicao(null);
+
+    await supabase
+      .from("cart_items")
+      .update({ quantidade: novaQtd })
+      .eq("id", itemAlvo.id);
+  }
+
+  async function handleSepararEmNovaLinha(e: React.FormEvent) {
+    e.preventDefault();
+    if (!produtoConflitoAdicao) return;
+    const prod = produtoConflitoAdicao;
+    const marcaLimpa = marcaNovaLinhaConflito.trim() || null;
+    const precoNum = parseDecimalBR(precoNovaLinhaConflito);
+    setProdutoConflitoAdicao(null);
+    setMarcaNovaLinhaConflito("");
+    setPrecoNovaLinhaConflito("");
+
+    await handleAdicionarProdutoAoCarrinho(
+      prod,
+      marcaLimpa,
+      precoNum > 0 ? precoNum : null,
+      true
+    );
   }
 
   async function handleAlterarQuantidadeRapida(
@@ -2090,6 +2100,113 @@ function CompraPlanejamentoContent() {
                 <span>
                   {salvando ? "Adicionando..." : "Salvar e adicionar"}
                 </span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE DECISÃO: AGRUPAR VS. SEPARAR PRODUTO JÁ EXISTENTE */}
+      {produtoConflitoAdicao && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[1px] flex items-end justify-center">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <h3 className="text-lg font-extrabold text-text-main truncate">
+                  {produtoConflitoAdicao.nome} já está na lista
+                </h3>
+                <p className="text-xs text-text-muted">
+                  Deseja somar na linha existente ou separar em outra linha?
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProdutoConflitoAdicao(null)}
+                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-text-muted shrink-0 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Opção 1: Agrupar nas linhas existentes (Mantém o preço original do item) */}
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-extrabold text-text-muted uppercase tracking-wider">
+                Opção 1: Agrupar (somar quantidade)
+              </span>
+              {itensCarrinho
+                .filter((i) => i.product_id === produtoConflitoAdicao.id)
+                .map((itemEx) => (
+                  <button
+                    key={itemEx.id}
+                    type="button"
+                    onClick={() => handleAgruparNoItemExistente(itemEx)}
+                    className="w-full p-3.5 rounded-2xl bg-primary-light/60 hover:bg-primary-light border border-primary/30 flex items-center justify-between text-left cursor-pointer transition-colors"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <div className="text-sm font-extrabold text-primary-hover truncate">
+                        Somar +1 {produtoConflitoAdicao.unidade} nesta linha
+                      </div>
+                      <div className="text-xs text-text-main font-medium truncate">
+                        Atual:{" "}
+                        {String(Number(itemEx.quantidade)).replace(".", ",")}{" "}
+                        {produtoConflitoAdicao.unidade}
+                        {itemEx.marca ? ` · ${itemEx.marca}` : " · Sem marca"}
+                        {itemEx.preco_estimado !== null
+                          ? ` (${formatarMoeda(itemEx.preco_estimado)})`
+                          : ""}
+                      </div>
+                    </div>
+                    <span className="h-9 px-3 rounded-xl bg-primary text-white text-xs font-extrabold flex items-center gap-1 shrink-0">
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Agrupar</span>
+                    </span>
+                  </button>
+                ))}
+            </div>
+
+            <div className="border-t border-border my-0.5" />
+
+            {/* Opção 2: Separar em nova linha independente (Outro sabor/marca ou preço) */}
+            <form
+              onSubmit={handleSepararEmNovaLinha}
+              className="flex flex-col gap-3"
+            >
+              <span className="text-xs font-extrabold text-text-muted uppercase tracking-wider">
+                Opção 2: Separar (criar nova linha independente)
+              </span>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-muted">
+                    Marca ou sabor
+                  </label>
+                  <input
+                    type="text"
+                    value={marcaNovaLinhaConflito}
+                    onChange={(e) => setMarcaNovaLinhaConflito(e.target.value)}
+                    placeholder="Ex: Tang Uva, Zero..."
+                    className="w-full h-11 px-3 rounded-xl bg-background border border-border text-xs font-semibold text-text-main focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-muted">
+                    Preço estimado (R$)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={precoNovaLinhaConflito}
+                    onChange={(e) => setPrecoNovaLinhaConflito(e.target.value)}
+                    placeholder="Opcional"
+                    className="w-full h-11 px-3 rounded-xl bg-background border border-border text-xs font-extrabold text-text-main focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="h-12 rounded-btn bg-card border-2 border-primary text-primary hover:bg-primary-light font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Separar em nova linha</span>
               </button>
             </form>
           </div>

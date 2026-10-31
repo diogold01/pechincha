@@ -101,3 +101,10 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Campo de marca no cadastro rápido ao vivo ([src/components/LiveMarketMode.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/LiveMarketMode.tsx)):** Adicionado o campo "Marca ou sabor (opcional)" no formulário de criação rápida de produto no mercado, permitindo já registrar o item com sua marca em um único passo.
 - **Histórico de preços imediato ([src/components/LiveMarketMode.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/LiveMarketMode.tsx)):** Ao preencher o preço na prateleira durante o cadastro rápido, o valor agora é gravado imediatamente no histórico da tabela `prices` vinculado ao mercado ativo e com a marca informada.
 - **Campo de marca no cadastro rápido de planejamento ([src/app/compra/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/compra/page.tsx)):** Incluído o campo "Marca ou sabor (opcional)" na gaveta de criação rápida que abre pela busca de produtos, repassando o vínculo diretamente ao item do carrinho e à tabela `prices`.
+
+---
+
+## Melhorias de Produção — Etapa 4: Agrupamento vs. Separação de Mesmo Produto
+- **Prompt de decisão ao adicionar produto existente ([src/app/compra/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/compra/page.tsx) e [src/components/LiveMarketMode.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/LiveMarketMode.tsx)):** Quando o usuário toca para adicionar um produto que já está na compra, o app agora exibe uma gaveta perguntando se deseja **Agrupar** ou **Separar em nova linha**.
+- **Regra segura de Agrupamento:** Ao escolher "Agrupar", o sistema preserva estritamente o preço que já estava registrado naquela linha e apenas soma `+1` na quantidade.
+- **Variações independentes na mesma compra:** Ao escolher "Separar", é criada uma nova linha independente em `cart_items` para o mesmo produto base, permitindo informar outra marca/sabor e outro preço (ex.: diferentes sabores de suco em pó com preços distintos na mesma compra).
