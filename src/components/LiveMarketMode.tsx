@@ -1520,7 +1520,7 @@ export default function LiveMarketMode({
          ===================================================================== */}
       {itemPrecoAtivo && produtoAtivoSheet && comparacaoItemAtivo && (
         <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[94vh] overflow-y-auto bg-card rounded-t-[24px] px-5 pt-3 pb-5 flex flex-col">
+          <div className="w-full max-w-md max-h-[94dvh] overflow-y-auto bg-card rounded-t-[24px] px-5 pt-3 pb-5 flex flex-col">
             {/* Puxador */}
             <div className="w-10 h-1 rounded-full bg-[#D5D8E2] mx-auto mb-3" />
 
@@ -1639,38 +1639,12 @@ export default function LiveMarketMode({
 
               <button
                 type="button"
-                onClick={() =>
-                  setMostrarInputNovaMarca(!mostrarInputNovaMarca)
-                }
+                onClick={() => setMostrarInputNovaMarca(true)}
                 className="h-11 px-3.5 rounded-full bg-[#F1F2F7] text-primary text-xs font-bold shrink-0 cursor-pointer"
               >
                 + Outra
               </button>
             </div>
-
-            {mostrarInputNovaMarca && (
-              <div className="mt-2 flex gap-2">
-                <input
-                  type="text"
-                  value={novaMarcaDigitada}
-                  onChange={(e) => setNovaMarcaDigitada(e.target.value)}
-                  placeholder="Digite o nome da marca..."
-                  className="flex-1 h-10 px-3.5 rounded-xl bg-background border border-border text-sm font-semibold"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (novaMarcaDigitada.trim()) {
-                      setMarcaSheet(novaMarcaDigitada.trim());
-                    }
-                    setMostrarInputNovaMarca(false);
-                  }}
-                  className="h-10 px-4 rounded-xl bg-primary text-white text-xs font-bold cursor-pointer"
-                >
-                  Usar
-                </button>
-              </div>
-            )}
 
             {/* Controle de Quantidade (44x44px) */}
             <div className="mt-3.5 flex items-center justify-between">
@@ -1707,6 +1681,11 @@ export default function LiveMarketMode({
                     value={qtdTextoSheet}
                     onChange={(e) => setQtdTextoSheet(e.target.value)}
                     onBlur={() => setEditandoQtdManual(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
                     autoFocus
                     className="w-20 h-10 text-center font-extrabold text-base bg-background border border-primary rounded-xl"
                   />
@@ -1829,6 +1808,76 @@ export default function LiveMarketMode({
               Salvar preço
             </button>
           </div>
+
+          {/* SUB-MODAL DEDICADO: DIGITAR NOVA MARCA (Evita conflito com teclado 3x4) */}
+          {mostrarInputNovaMarca && (
+            <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-[2px] flex items-center justify-center p-4">
+              <div className="w-full max-w-sm bg-card rounded-2xl p-5 shadow-2xl border border-border flex flex-col gap-3.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-base font-extrabold text-text-main">
+                    Nova Marca
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarInputNovaMarca(false);
+                      setNovaMarcaDigitada("");
+                    }}
+                    className="w-8 h-8 rounded-full bg-background flex items-center justify-center text-text-muted hover:text-text-main cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-text-muted">
+                  Digite o nome ou variação da marca:
+                </p>
+                <input
+                  type="text"
+                  value={novaMarcaDigitada}
+                  onChange={(e) => setNovaMarcaDigitada(e.target.value)}
+                  placeholder="Ex: Tang Laranja, Clight..."
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (novaMarcaDigitada.trim()) {
+                        setMarcaSheet(novaMarcaDigitada.trim());
+                      }
+                      setMostrarInputNovaMarca(false);
+                      setNovaMarcaDigitada("");
+                    }
+                  }}
+                  className="w-full h-12 px-4 rounded-xl bg-background border border-border text-sm font-semibold text-text-main focus:outline-none focus:border-primary"
+                />
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarInputNovaMarca(false);
+                      setNovaMarcaDigitada("");
+                    }}
+                    className="flex-1 h-11 rounded-xl bg-background border border-border text-text-muted font-bold text-xs cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (novaMarcaDigitada.trim()) {
+                        setMarcaSheet(novaMarcaDigitada.trim());
+                      }
+                      setMostrarInputNovaMarca(false);
+                      setNovaMarcaDigitada("");
+                    }}
+                    className="flex-1 h-11 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Usar marca</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1880,15 +1929,22 @@ export default function LiveMarketMode({
          ===================================================================== */}
       {sheetAdicionarAberto && (
         <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[88vh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-extrabold">
-                Adicionar item ao carrinho
+          <div className="w-full max-w-md max-h-[90dvh] sm:max-h-[85vh] bg-card rounded-t-[24px] p-4 sm:p-5 flex flex-col min-h-0">
+            {/* Topo fixo: Título e Botão Fechar */}
+            <div className="flex items-center justify-between shrink-0 mb-3">
+              <h3 className="text-lg font-extrabold text-text-main">
+                {criandoProdutoNovo
+                  ? "Novo produto rápido"
+                  : "Adicionar à compra"}
               </h3>
               <button
                 type="button"
-                onClick={() => setSheetAdicionarAberto(false)}
-                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-text-muted cursor-pointer"
+                onClick={() => {
+                  (document.activeElement as HTMLElement)?.blur();
+                  setSheetAdicionarAberto(false);
+                  setCriandoProdutoNovo(false);
+                }}
+                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-text-muted hover:text-text-main cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1896,7 +1952,8 @@ export default function LiveMarketMode({
 
             {!criandoProdutoNovo ? (
               <>
-                <div className="relative flex items-center">
+                {/* Input de busca fixo no topo do sheet */}
+                <div className="relative flex items-center shrink-0 mb-3">
                   <Search className="w-5 h-5 text-text-muted absolute left-3.5" />
                   <input
                     type="text"
@@ -1904,62 +1961,78 @@ export default function LiveMarketMode({
                     onChange={(e) => setBuscaRapida(e.target.value)}
                     placeholder="Digite o nome do produto..."
                     autoFocus
-                    className="w-full h-12 pl-11 pr-4 rounded-2xl bg-background border border-border text-sm font-semibold focus:outline-none focus:border-primary"
+                    className="w-full h-12 pl-11 pr-10 rounded-2xl bg-background border border-border text-sm font-semibold focus:outline-none focus:border-primary text-text-main"
                   />
+                  {buscaRapida && (
+                    <button
+                      type="button"
+                      onClick={() => setBuscaRapida("")}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-text-muted absolute right-2.5 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex flex-col divide-y divide-border border border-border rounded-2xl overflow-hidden">
-                  {produtosBuscaFlutuante.map((p) => {
-                    const sec = p.sector_id
-                      ? mapaSetores.get(p.sector_id)
-                      : null;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleAdicionarProdutoRapidoAoVivo(p)}
-                        className="px-4 py-3 bg-card hover:bg-background flex items-center justify-between text-left cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-lg">
-                            {p.emoji || sec?.emoji || "📦"}
-                          </span>
-                          <div>
-                            <div className="text-sm font-bold text-text-main">
-                              {p.nome}
-                            </div>
-                            <div className="text-xs text-text-muted">
-                              {sec?.nome || "Sem setor"} · {p.unidade}
+                {/* Área rolável de resultados + botão cadastrar com scroll suave */}
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col gap-2 pb-6 pr-0.5">
+                  <div className="flex flex-col divide-y divide-border border border-border rounded-2xl overflow-hidden">
+                    {produtosBuscaFlutuante.map((p) => {
+                      const sec = p.sector_id
+                        ? mapaSetores.get(p.sector_id)
+                        : null;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            (document.activeElement as HTMLElement)?.blur();
+                            handleAdicionarProdutoRapidoAoVivo(p);
+                          }}
+                          className="px-4 py-3 bg-card hover:bg-background flex items-center justify-between text-left cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="text-lg shrink-0">
+                              {p.emoji || sec?.emoji || "📦"}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-text-main truncate">
+                                {p.nome}
+                              </div>
+                              <div className="text-xs text-text-muted truncate">
+                                {sec?.nome || "Sem setor"} · {p.unidade}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <span className="px-3 py-1 rounded-full bg-primary-light text-primary text-xs font-bold">
-                          + Adicionar
-                        </span>
-                      </button>
-                    );
-                  })}
+                          <span className="px-3 py-1 rounded-full bg-primary-light text-primary text-xs font-bold shrink-0">
+                            + Adicionar
+                          </span>
+                        </button>
+                      );
+                    })}
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNovoProdNome(buscaRapida.trim());
-                      setNovoProdSetorId(setores[0]?.id || "");
-                      setNovoProdUnidade("un");
-                      setNovoProdPreco("");
-                      setCriandoProdutoNovo(true);
-                    }}
-                    className="px-4 py-3.5 bg-primary-light/60 hover:bg-primary-light text-primary-hover text-xs font-extrabold text-left cursor-pointer"
-                  >
-                    + Cadastrar novo produto{" "}
-                    {buscaRapida.trim() ? `"${buscaRapida.trim()}"` : ""} agora
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        (document.activeElement as HTMLElement)?.blur();
+                        setNovoProdNome(buscaRapida.trim());
+                        setNovoProdSetorId(setores[0]?.id || "");
+                        setNovoProdUnidade("un");
+                        setNovoProdPreco("");
+                        setCriandoProdutoNovo(true);
+                      }}
+                      className="px-4 py-3.5 bg-primary-light/60 hover:bg-primary-light text-primary-hover text-xs font-extrabold text-left cursor-pointer transition-colors"
+                    >
+                      + Cadastrar novo produto{" "}
+                      {buscaRapida.trim() ? `"${buscaRapida.trim()}"` : ""} agora
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (
               <form
                 onSubmit={handleCriarECadastrarProdutoNoMercado}
-                className="flex flex-col gap-3.5"
+                className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col gap-3.5 pb-6 pr-0.5"
               >
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-bold text-text-muted">
