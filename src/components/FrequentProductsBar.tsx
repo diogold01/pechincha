@@ -71,7 +71,7 @@ export default function FrequentProductsBar({
   }
 
   return (
-    <section className="bg-card border border-border rounded-card p-3.5 flex flex-col gap-2.5 shadow-sm">
+    <section className="w-full max-w-full min-w-0 bg-card border border-border rounded-card p-3.5 flex flex-col gap-2.5 shadow-sm">
       <div className="flex items-center justify-between px-0.5">
         <div className="flex items-center gap-1.5 text-xs font-extrabold text-text-main">
           <Sparkles className="w-3.5 h-3.5 text-primary" />
@@ -82,7 +82,7 @@ export default function FrequentProductsBar({
         </span>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+      <div className="w-full max-w-full min-w-0 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
         {produtosFrequentes.map((prod) => {
           const jaEstaNoCarrinho = idsNoCarrinhoAtual.has(prod.id);
           const setor = prod.sector_id ? mapaSetores.get(prod.sector_id) : null;

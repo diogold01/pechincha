@@ -1255,15 +1255,15 @@ function CompraPlanejamentoContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-text-main pb-32">
-      <main className="flex-1 w-full max-w-md mx-auto px-4 sm:px-5 pt-5 flex flex-col gap-4">
+    <div className="min-h-screen flex flex-col bg-background text-text-main pb-32 w-full max-w-full overflow-x-hidden">
+      <main className="flex-1 w-full max-w-md mx-auto px-4 sm:px-5 pt-5 flex flex-col gap-4 min-w-0 max-w-full">
         {/* Topo: Seletor de Carrinho e Botão Novo Carrinho */}
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-[13px] text-text-muted font-medium flex items-center gap-2">
-              <span>Planejamento de Compra</span>
+        <div className="flex items-center justify-between gap-2 w-full min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] text-text-muted font-medium flex items-center gap-2 truncate">
+              <span className="truncate">Planejamento de Compra</span>
               {aoVivoConectado && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-light text-primary-hover text-[11px] font-bold">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-light text-primary-hover text-[11px] font-bold shrink-0">
                   <span
                     className={`w-1.5 h-1.5 rounded-full bg-primary ${
                       pulsoRealtime ? "animate-ping" : ""
@@ -1273,7 +1273,7 @@ function CompraPlanejamentoContent() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <h1 className="text-[24px] font-extrabold leading-tight truncate">
                 {carrinhoAtual ? carrinhoAtual.nome : "Carrinho"}
               </h1>
@@ -1281,7 +1281,7 @@ function CompraPlanejamentoContent() {
                 <button
                   type="button"
                   onClick={abrirModalEditarCarrinho}
-                  className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center text-text-muted hover:text-text-main cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center text-text-muted hover:text-text-main shrink-0 cursor-pointer"
                   title="Editar nome ou mercado do carrinho"
                 >
                   <Pencil className="w-3.5 h-3.5" />
@@ -1302,7 +1302,7 @@ function CompraPlanejamentoContent() {
 
         {/* Se houver mais de um carrinho planejado/aberto, pílulas para alternar */}
         {carrinhosAtivos.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar w-full max-w-full min-w-0">
             {carrinhosAtivos.map((c) => (
               <button
                 key={c.id}
