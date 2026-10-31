@@ -164,6 +164,7 @@ export default function LiveMarketMode({
   const [buscaRapida, setBuscaRapida] = useState("");
   const [criandoProdutoNovo, setCriandoProdutoNovo] = useState(false);
   const [novoProdNome, setNovoProdNome] = useState("");
+  const [novoProdMarca, setNovoProdMarca] = useState("");
   const [novoProdSetorId, setNovoProdSetorId] = useState("");
   const [novoProdUnidade, setNovoProdUnidade] = useState("un");
   const [novoProdPreco, setNovoProdPreco] = useState("");
@@ -920,6 +921,7 @@ export default function LiveMarketMode({
     try {
       const supabase = createClient();
       const precoNum = parseDecimalBR(novoProdPreco);
+      const marcaFinal = novoProdMarca.trim() || null;
 
       const { data: prodCriado, error } = await supabase
         .from("products")
@@ -936,12 +938,13 @@ export default function LiveMarketMode({
       if (error || !prodCriado) throw error;
       const p = prodCriado as Product;
 
-      const { data: itemCriado } = await supabase
+      const { data: itemCriado, error: itemErr } = await supabase
         .from("cart_items")
         .insert({
           cart_id: carrinho.id,
           group_id: groupId,
           product_id: p.id,
+          marca: marcaFinal,
           quantidade: 1,
           preco_estimado: precoNum > 0 ? precoNum : null,
           preco_real: precoNum > 0 ? precoNum : null,
@@ -952,13 +955,32 @@ export default function LiveMarketMode({
         .select()
         .single();
 
+      if (itemErr) throw itemErr;
+
       if (itemCriado) {
         setItensCarrinho((prev) => [...prev, itemCriado as CartItem]);
+
+        // Se informou preço e há mercado ativo, já registra no histórico de preços (prices)
+        if (precoNum > 0 && marketIdCarrinho) {
+          await supabase.from("prices").insert({
+            group_id: groupId,
+            product_id: p.id,
+            market_id: marketIdCarrinho,
+            marca: marcaFinal,
+            valor: precoNum,
+            tipo: "varejo",
+            quantidade_minima: 1,
+            data: dataHojeISO(),
+            criado_por: userId,
+            cart_item_id: itemCriado.id,
+          });
+        }
       }
 
       setCriandoProdutoNovo(false);
       setSheetAdicionarAberto(false);
       setBuscaRapida("");
+      setNovoProdMarca("");
       await onReload(carrinho.id);
     } catch {
       setErro("Não foi possível cadastrar o produto.");
@@ -2016,6 +2038,7 @@ export default function LiveMarketMode({
                       onClick={() => {
                         (document.activeElement as HTMLElement)?.blur();
                         setNovoProdNome(buscaRapida.trim());
+                        setNovoProdMarca("");
                         setNovoProdSetorId(setores[0]?.id || "");
                         setNovoProdUnidade("un");
                         setNovoProdPreco("");
@@ -2044,8 +2067,21 @@ export default function LiveMarketMode({
                     onChange={(e) => setNovoProdNome(e.target.value)}
                     placeholder="Ex: Café torrado 500g"
                     autoFocus
-                    className="w-full h-12 px-3.5 rounded-xl bg-background border border-border text-sm font-semibold"
+                    className="w-full h-12 px-3.5 rounded-xl bg-background border border-border text-sm font-semibold text-text-main"
                     required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-muted">
+                    Marca ou sabor (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={novoProdMarca}
+                    onChange={(e) => setNovoProdMarca(e.target.value)}
+                    placeholder="Ex: Melitta, Pilão, Tang Laranja..."
+                    className="w-full h-12 px-3.5 rounded-xl bg-background border border-border text-sm font-semibold text-text-main"
                   />
                 </div>
 

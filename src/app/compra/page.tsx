@@ -106,6 +106,7 @@ function CompraPlanejamentoContent() {
   // Bottom sheet: Cadastro Rápido de Produto que não existe
   const [sheetNovoProdRapido, setSheetNovoProdRapido] = useState(false);
   const [nomeProdRapido, setNomeProdRapido] = useState("");
+  const [marcaProdRapido, setMarcaProdRapido] = useState("");
   const [setorProdRapidoId, setSetorProdRapidoId] = useState("");
   const [unidadeProdRapido, setUnidadeProdRapido] = useState("un");
   const [emojiProdRapido, setEmojiProdRapido] = useState("");
@@ -900,7 +901,11 @@ function CompraPlanejamentoContent() {
   }
 
   // --- Funções de Itens no Carrinho (Com atualização otimista!) ---
-  async function handleAdicionarProdutoAoCarrinho(prod: Product) {
+  async function handleAdicionarProdutoAoCarrinho(
+    prod: Product,
+    marcaInicial: string | null = null,
+    precoEstInicial: number | null = null
+  ) {
     if (!groupId) return;
     const supabase = createClient();
 
@@ -983,7 +988,11 @@ function CompraPlanejamentoContent() {
       metodo: settings?.metodo_preco || "media",
       mesesMedia: settings?.meses_media || 3,
       marketIdCarrinho: targetMarketId,
+      marcaItem: marcaInicial,
     });
+
+    const precoFinalEstimado =
+      precoEstInicial !== null ? precoEstInicial : calc.precoUnitarioEstimado;
 
     const novaOrdem = itensCarrinho.length + 1;
     const { data: itemCriado, error: itemErr } = await supabase
@@ -992,9 +1001,9 @@ function CompraPlanejamentoContent() {
         cart_id: targetCartId,
         group_id: groupId,
         product_id: prod.id,
-        marca: null,
+        marca: marcaInicial,
         quantidade: 1,
-        preco_estimado: calc.precoUnitarioEstimado,
+        preco_estimado: precoFinalEstimado,
         preco_real: null,
         marcado: false,
         atacado_aplicado: calc.atacadoAplicado,
@@ -1146,6 +1155,7 @@ function CompraPlanejamentoContent() {
   function abrirCadastroRapidoDaBusca() {
     setErro(null);
     setNomeProdRapido(buscaProduto.trim());
+    setMarcaProdRapido("");
     setSetorProdRapidoId(setores[0]?.id || "");
     setUnidadeProdRapido("un");
     setEmojiProdRapido("");
@@ -1160,6 +1170,7 @@ function CompraPlanejamentoContent() {
     setSalvando(true);
     try {
       const supabase = createClient();
+      const marcaFinal = marcaProdRapido.trim() || null;
       const { data: novoProd, error } = await supabase
         .from("products")
         .insert({
@@ -1183,7 +1194,7 @@ function CompraPlanejamentoContent() {
           group_id: groupId,
           product_id: p.id,
           market_id: mktId,
-          marca: null,
+          marca: marcaFinal,
           valor: valPreco,
           tipo: "varejo",
           quantidade_minima: 1,
@@ -1194,8 +1205,13 @@ function CompraPlanejamentoContent() {
 
       setSheetNovoProdRapido(false);
       setBuscaProduto("");
+      setMarcaProdRapido("");
       await carregarDados(carrinhoAtual?.id);
-      await handleAdicionarProdutoAoCarrinho(p);
+      await handleAdicionarProdutoAoCarrinho(
+        p,
+        marcaFinal,
+        valPreco > 0 ? valPreco : null
+      );
     } catch {
       setErro("Erro ao cadastrar o produto rápido.");
     } finally {
@@ -1999,6 +2015,19 @@ function CompraPlanejamentoContent() {
                     required
                   />
                 </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-muted">
+                  Marca ou sabor (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={marcaProdRapido}
+                  onChange={(e) => setMarcaProdRapido(e.target.value)}
+                  placeholder="Ex: Tang Laranja, Melitta, Omo..."
+                  className="w-full h-12 px-3.5 rounded-xl bg-background border border-border text-sm font-semibold text-text-main"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
