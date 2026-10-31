@@ -17,6 +17,7 @@ import {
   AlertCircle,
   CreditCard,
   ShoppingBag,
+  Pencil,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -149,6 +150,14 @@ export default function LiveMarketMode({
   const [marcaSheet, setMarcaSheet] = useState("");
   const [novaMarcaDigitada, setNovaMarcaDigitada] = useState("");
   const [mostrarInputNovaMarca, setMostrarInputNovaMarca] = useState(false);
+  const [mostrarModalRenomearProduto, setMostrarModalRenomearProduto] =
+    useState(false);
+  const [nomeRenomearProduto, setNomeRenomearProduto] = useState("");
+  const [unidadeRenomearProduto, setUnidadeRenomearProduto] = useState("un");
+  const [produtosEditadosLocal, setProdutosEditadosLocal] = useState<
+    Record<string, { nome: string; unidade: string }>
+  >({});
+  const mapaTempIdParaRealRef = useRef<Map<string, string>>(new Map());
   const [qtdTextoSheet, setQtdTextoSheet] = useState("1");
   const [editandoQtdManual, setEditandoQtdManual] = useState(false);
   const [mostrarAtacadoSheet, setMostrarAtacadoSheet] = useState(false);
@@ -182,12 +191,15 @@ export default function LiveMarketMode({
   >([]);
   const [finalizando, setFinalizando] = useState(false);
 
-  // Mapas auxiliares
+  // Mapas auxiliares (mescla eventuais renomeações locais imediatas sem duplicar)
   const mapaProdutos = useMemo(() => {
     const map = new Map<string, Product>();
-    produtos.forEach((p) => map.set(p.id, p));
+    produtos.forEach((p) => {
+      const editado = produtosEditadosLocal[p.id];
+      map.set(p.id, editado ? { ...p, ...editado } : p);
+    });
     return map;
-  }, [produtos]);
+  }, [produtos, produtosEditadosLocal]);
 
   const mapaSetores = useMemo(() => {
     const map = new Map<string, Sector>();
@@ -603,6 +615,10 @@ export default function LiveMarketMode({
     setMarcaSheet(item.marca || "");
     setNovaMarcaDigitada("");
     setMostrarInputNovaMarca(false);
+    setMostrarModalRenomearProduto(false);
+    const prod = mapaProdutos.get(item.product_id);
+    setNomeRenomearProduto(prod?.nome || "");
+    setUnidadeRenomearProduto(prod?.unidade || "un");
     setQtdTextoSheet(String(Number(item.quantidade)).replace(".", ","));
     setEditandoQtdManual(false);
     setMostrarAtacadoSheet(item.atacado_aplicado);
@@ -697,6 +713,56 @@ export default function LiveMarketMode({
     precos,
   ]);
 
+  async function handleConfirmarRenomearProduto() {
+    if (!itemPrecoAtivo) return;
+    const novoNome = nomeRenomearProduto.trim();
+    if (!novoNome) return;
+
+    const prodId = itemPrecoAtivo.product_id;
+    const novaUnidade = unidadeRenomearProduto || "un";
+
+    // Fecha o teclado nativo do celular antes de voltar ao teclado 3x4
+    if (typeof document !== "undefined") {
+      (document.activeElement as HTMLElement)?.blur?.();
+    }
+
+    setProdutosEditadosLocal((prev) => ({
+      ...prev,
+      [prodId]: { nome: novoNome, unidade: novaUnidade },
+    }));
+    setMostrarModalRenomearProduto(false);
+
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "UPDATE_PRODUCT",
+        alvoId: prodId,
+        dados: { nome: novoNome, unidade: novaUnidade },
+      });
+      setQtdFilaOffline(totalFila);
+      return;
+    }
+
+    setSincronizando(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("products")
+        .update({ nome: novoNome, unidade: novaUnidade })
+        .eq("id", prodId);
+      if (error) throw error;
+      await onReload(carrinho.id);
+    } catch {
+      const totalFila = await enfileirarOperacaoOffline({
+        tipo: "UPDATE_PRODUCT",
+        alvoId: prodId,
+        dados: { nome: novoNome, unidade: novaUnidade },
+      });
+      setQtdFilaOffline(totalFila);
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
   async function handleSalvarPrecoItem() {
     if (!itemPrecoAtivo) return;
     const qtdFinal = parseDecimalBR(qtdTextoSheet);
@@ -722,12 +788,25 @@ export default function LiveMarketMode({
 
     const marcaFinal = marcaSheet.trim() || null;
 
-    // Atualização otimista imediata na lista
+    // Resolve o ID real caso o modal tenha sido aberto enquanto o item ainda tinha id temporário (temp-xxx)
+    const idRealResolvido =
+      mapaTempIdParaRealRef.current.get(itemPrecoAtivo.id) ||
+      itensCarrinho.find(
+        (x) =>
+          x.id === itemPrecoAtivo.id ||
+          (itemPrecoAtivo.id.startsWith("temp-") &&
+            x.product_id === itemPrecoAtivo.product_id &&
+            !x.id.startsWith("temp-"))
+      )?.id ||
+      itemPrecoAtivo.id;
+
+    // Atualização otimista imediata na lista (usando tanto o id original quanto o id real resolvido)
     setItensCarrinho((prev) =>
       prev.map((x) =>
-        x.id === itemPrecoAtivo.id
+        x.id === itemPrecoAtivo.id || x.id === idRealResolvido
           ? {
               ...x,
+              id: idRealResolvido,
               quantidade: qtdFinal,
               marca: marcaFinal,
               preco_real: precoUnitarioFinal,
@@ -738,7 +817,7 @@ export default function LiveMarketMode({
       )
     );
 
-    const itemSalvo = itemPrecoAtivo;
+    const itemSalvo = { ...itemPrecoAtivo, id: idRealResolvido };
     setItemPrecoAtivo(null);
 
     const payloadUpdate = {
@@ -749,12 +828,34 @@ export default function LiveMarketMode({
       atacado_aplicado: usarAtacado,
     };
 
+    const payloadPreco = marketIdCarrinho
+      ? {
+          group_id: groupId,
+          product_id: itemSalvo.product_id,
+          market_id: marketIdCarrinho,
+          marca: marcaFinal,
+          valor: precoUnitarioFinal,
+          tipo: usarAtacado ? "atacado" : "varejo",
+          quantidade_minima: usarAtacado ? qtdMinAtacadoNum : 1,
+          data: dataHojeISO(),
+          criado_por: userId,
+          cart_item_id: itemSalvo.id,
+        }
+      : null;
+
     if (typeof window !== "undefined" && !window.navigator.onLine) {
-      const totalFila = await enfileirarOperacaoOffline({
+      let totalFila = await enfileirarOperacaoOffline({
         tipo: "UPDATE_CART_ITEM",
         alvoId: itemSalvo.id,
         dados: payloadUpdate,
       });
+      if (payloadPreco) {
+        totalFila = await enfileirarOperacaoOffline({
+          tipo: "UPSERT_PRICE_POR_ITEM",
+          alvoId: itemSalvo.id,
+          dados: payloadPreco,
+        });
+      }
       setQtdFilaOffline(totalFila);
       return;
     }
@@ -769,8 +870,38 @@ export default function LiveMarketMode({
         .eq("id", itemSalvo.id);
       if (error) throw error;
 
-      // Se o usuário também preencheu um preço de atacado nas opções, registra no histórico de atacado
-      if (ehAtacadoSheet && precoAtacadoNum > 0 && marketIdCarrinho) {
+      // Atualiza ou insere o histórico na tabela prices vinculado ao cart_item_id sem duplicar
+      if (payloadPreco && !itemSalvo.id.startsWith("temp-")) {
+        const { data: existente } = await supabase
+          .from("prices")
+          .select("id")
+          .eq("cart_item_id", itemSalvo.id)
+          .maybeSingle();
+
+        if (existente?.id) {
+          await supabase
+            .from("prices")
+            .update({
+              market_id: marketIdCarrinho,
+              marca: marcaFinal,
+              valor: precoUnitarioFinal,
+              tipo: usarAtacado ? "atacado" : "varejo",
+              quantidade_minima: usarAtacado ? qtdMinAtacadoNum : 1,
+              data: dataHojeISO(),
+            })
+            .eq("id", existente.id);
+        } else {
+          await supabase.from("prices").insert(payloadPreco);
+        }
+      }
+
+      // Se o usuário preencheu um preço de atacado mas comprou quantidade de varejo, registra também a dica de atacado
+      if (
+        ehAtacadoSheet &&
+        !usarAtacado &&
+        precoAtacadoNum > 0 &&
+        marketIdCarrinho
+      ) {
         await supabase.from("prices").insert({
           group_id: groupId,
           product_id: itemSalvo.product_id,
@@ -784,11 +915,18 @@ export default function LiveMarketMode({
         });
       }
     } catch {
-      const totalFila = await enfileirarOperacaoOffline({
+      let totalFila = await enfileirarOperacaoOffline({
         tipo: "UPDATE_CART_ITEM",
         alvoId: itemSalvo.id,
         dados: payloadUpdate,
       });
+      if (payloadPreco) {
+        totalFila = await enfileirarOperacaoOffline({
+          tipo: "UPSERT_PRICE_POR_ITEM",
+          alvoId: itemSalvo.id,
+          dados: payloadPreco,
+        });
+      }
       setQtdFilaOffline(totalFila);
     } finally {
       setSincronizando(false);
@@ -887,9 +1025,19 @@ export default function LiveMarketMode({
 
       if (error || !novoItem) throw error;
 
-      setItensCarrinho((prev) =>
-        prev.map((x) => (x.id === tempId ? (novoItem as CartItem) : x))
+      mapaTempIdParaRealRef.current.set(tempId, novoItem.id);
+      setItemPrecoAtivo((atual) =>
+        atual && atual.id === tempId
+          ? { ...(novoItem as CartItem), ...atual, id: novoItem.id }
+          : atual
       );
+
+      setItensCarrinho((prev) => {
+        if (prev.some((x) => x.id === novoItem.id)) {
+          return prev.filter((x) => x.id !== tempId);
+        }
+        return prev.map((x) => (x.id === tempId ? (novoItem as CartItem) : x));
+      });
 
       // Se informou preço real na separação e há mercado ativo, registra no histórico prices
       if (precoRealVal !== null && marketIdCarrinho) {
@@ -981,27 +1129,51 @@ export default function LiveMarketMode({
 
   async function handleCriarECadastrarProdutoNoMercado(e: React.FormEvent) {
     e.preventDefault();
-    if (!novoProdNome.trim()) return;
+    const nomeLimpo = novoProdNome.trim();
+    if (!nomeLimpo) return;
     setSincronizando(true);
     try {
       const supabase = createClient();
       const precoNum = parseDecimalBR(novoProdPreco);
       const marcaFinal = novoProdMarca.trim() || null;
 
-      const { data: prodCriado, error } = await supabase
-        .from("products")
-        .insert({
-          group_id: groupId,
-          nome: novoProdNome.trim(),
-          sector_id: novoProdSetorId || setores[0]?.id || null,
-          unidade: novoProdUnidade,
-          ativo: true,
-        })
-        .select()
-        .single();
+      // Evita duplicar produto se já existir um com o mesmo nome no catálogo
+      const existenteCat = produtos.find(
+        (x) => x.nome.trim().toLowerCase() === nomeLimpo.toLowerCase()
+      );
 
-      if (error || !prodCriado) throw error;
-      const p = prodCriado as Product;
+      let p: Product;
+      if (existenteCat) {
+        const { data: prodAtualizado, error: errUpd } = await supabase
+          .from("products")
+          .update({
+            nome: nomeLimpo,
+            sector_id:
+              novoProdSetorId || existenteCat.sector_id || setores[0]?.id || null,
+            unidade: novoProdUnidade || existenteCat.unidade,
+            ativo: true,
+          })
+          .eq("id", existenteCat.id)
+          .select()
+          .single();
+        if (errUpd || !prodAtualizado) throw errUpd;
+        p = prodAtualizado as Product;
+      } else {
+        const { data: prodCriado, error } = await supabase
+          .from("products")
+          .insert({
+            group_id: groupId,
+            nome: nomeLimpo,
+            sector_id: novoProdSetorId || setores[0]?.id || null,
+            unidade: novoProdUnidade,
+            ativo: true,
+          })
+          .select()
+          .single();
+
+        if (error || !prodCriado) throw error;
+        p = prodCriado as Product;
+      }
 
       const { data: itemCriado, error: itemErr } = await supabase
         .from("cart_items")
@@ -1023,7 +1195,11 @@ export default function LiveMarketMode({
       if (itemErr) throw itemErr;
 
       if (itemCriado) {
-        setItensCarrinho((prev) => [...prev, itemCriado as CartItem]);
+        setItensCarrinho((prev) =>
+          prev.some((x) => x.id === (itemCriado as CartItem).id)
+            ? prev
+            : [...prev, itemCriado as CartItem]
+        );
 
         // Se informou preço e há mercado ativo, já registra no histórico de preços (prices)
         if (precoNum > 0 && marketIdCarrinho) {
@@ -1617,8 +1793,24 @@ export default function LiveMarketMode({
                 {produtoAtivoSheet.emoji || setorAtivoSheet?.emoji || "📦"}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[20px] font-extrabold leading-[26px] text-text-main truncate">
-                  {produtoAtivoSheet.nome}
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="text-[20px] font-extrabold leading-[26px] text-text-main truncate">
+                    {produtoAtivoSheet.nome}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNomeRenomearProduto(produtoAtivoSheet.nome);
+                      setUnidadeRenomearProduto(
+                        produtoAtivoSheet.unidade || "un"
+                      );
+                      setMostrarModalRenomearProduto(true);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-light text-primary text-[11px] font-bold shrink-0 cursor-pointer"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Renomear</span>
+                  </button>
                 </div>
                 <div className="text-xs text-text-muted truncate">
                   {setorAtivoSheet?.nome || "Setor"} · preço por{" "}
@@ -1960,6 +2152,81 @@ export default function LiveMarketMode({
                   >
                     <Check className="w-4 h-4" />
                     <span>Usar marca</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SUB-MODAL DEDICADO: RENOMEAR PRODUTO NO CADASTRO GERAL SEM DUPLICAR */}
+          {mostrarModalRenomearProduto && (
+            <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-[2px] flex items-center justify-center p-4">
+              <div className="w-full max-w-sm bg-card rounded-2xl p-5 shadow-2xl border border-border flex flex-col gap-3.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-base font-extrabold text-text-main">
+                    Renomear produto
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarModalRenomearProduto(false)}
+                    className="w-8 h-8 rounded-full bg-background flex items-center justify-center text-text-muted hover:text-text-main cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-text-muted">
+                  Altera o nome no cadastro geral sem criar item duplicado:
+                </p>
+                <input
+                  type="text"
+                  value={nomeRenomearProduto}
+                  onChange={(e) => setNomeRenomearProduto(e.target.value)}
+                  placeholder="Ex: Refrigerante 2L"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleConfirmarRenomearProduto();
+                    }
+                  }}
+                  className="w-full h-12 px-4 rounded-xl bg-background border border-border text-sm font-semibold text-text-main focus:outline-none focus:border-primary"
+                />
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold text-text-muted">
+                    Unidade de medida
+                  </span>
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    {UNIDADES_RAPIDAS.map((u) => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => setUnidadeRenomearProduto(u)}
+                        className={`h-8 px-3 rounded-lg text-xs font-bold shrink-0 border cursor-pointer ${
+                          unidadeRenomearProduto === u
+                            ? "bg-primary text-white border-primary"
+                            : "bg-background text-text-main border-border"
+                        }`}
+                      >
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setMostrarModalRenomearProduto(false)}
+                    className="flex-1 h-11 rounded-xl bg-background border border-border text-text-muted font-bold text-xs cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmarRenomearProduto}
+                    className="flex-1 h-11 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Salvar nome</span>
                   </button>
                 </div>
               </div>

@@ -97,11 +97,16 @@ function CompraPlanejamentoContent() {
   const [nomeCarrinhoForm, setNomeCarrinhoForm] = useState("Compra da semana");
   const [mercadoCarrinhoFormId, setMercadoCarrinhoFormId] = useState("");
 
-  // Bottom sheet: Editar Item do Carrinho (quantidade exata, marca, preço estimado manual)
+  // Bottom sheet: Editar Item do Carrinho (quantidade exata, marca, preço estimado manual e renomear produto)
   const [itemEditando, setItemEditando] = useState<CartItem | null>(null);
   const [qtdItemForm, setQtdItemForm] = useState("1");
   const [marcaItemForm, setMarcaItemForm] = useState("");
   const [precoManualForm, setPrecoManualForm] = useState("");
+  const [editandoNomeProdutoNoItem, setEditandoNomeProdutoNoItem] =
+    useState(false);
+  const [nomeProdutoEditandoItem, setNomeProdutoEditandoItem] = useState("");
+  const [unidadeProdutoEditandoItem, setUnidadeProdutoEditandoItem] =
+    useState("un");
 
   // Bottom sheet: Cadastro Rápido de Produto que não existe
   const [sheetNovoProdRapido, setSheetNovoProdRapido] = useState(false);
@@ -987,7 +992,11 @@ function CompraPlanejamentoContent() {
       .single();
 
     if (!itemErr && itemCriado) {
-      setItensCarrinho((prev) => [...prev, itemCriado as CartItem]);
+      setItensCarrinho((prev) =>
+        prev.some((x) => x.id === (itemCriado as CartItem).id)
+          ? prev
+          : [...prev, itemCriado as CartItem]
+      );
     }
     setBuscaProduto("");
   }
@@ -1085,7 +1094,7 @@ function CompraPlanejamentoContent() {
     await supabase.from("cart_items").delete().eq("id", itemId);
   }
 
-  // --- Editar Item Detalhado (Marca, Quantidade Decimal, Preço Estimado) ---
+  // --- Editar Item Detalhado (Marca, Quantidade Decimal, Preço Estimado e Renomear Produto) ---
   function abrirEdicaoItem(
     item: CartItem,
     precoUnitarioCalculado: number | null
@@ -1099,6 +1108,10 @@ function CompraPlanejamentoContent() {
         ? precoUnitarioCalculado.toFixed(2).replace(".", ",")
         : ""
     );
+    const prod = mapaProdutos.get(item.product_id);
+    setEditandoNomeProdutoNoItem(false);
+    setNomeProdutoEditandoItem(prod?.nome || "");
+    setUnidadeProdutoEditandoItem(prod?.unidade || "un");
   }
 
   async function handleSalvarEdicaoItem(e: React.FormEvent) {
@@ -1128,6 +1141,25 @@ function CompraPlanejamentoContent() {
     setSalvando(true);
     try {
       const supabase = createClient();
+
+      // Se o usuário renomeou o produto ou trocou a unidade na gaveta do item, faz UPDATE direto em products
+      const prodAtual = mapaProdutos.get(itemEditando.product_id);
+      const novoNomeProd = nomeProdutoEditandoItem.trim();
+      if (
+        novoNomeProd &&
+        prodAtual &&
+        (novoNomeProd !== prodAtual.nome ||
+          unidadeProdutoEditandoItem !== prodAtual.unidade)
+      ) {
+        await supabase
+          .from("products")
+          .update({
+            nome: novoNomeProd,
+            unidade: unidadeProdutoEditandoItem,
+          })
+          .eq("id", prodAtual.id);
+      }
+
       await supabase
         .from("cart_items")
         .update({
@@ -1155,6 +1187,7 @@ function CompraPlanejamentoContent() {
       }
 
       setItemEditando(null);
+      setEditandoNomeProdutoNoItem(false);
       await carregarDados(carrinhoAtual?.id);
     } finally {
       setSalvando(false);
@@ -1175,27 +1208,52 @@ function CompraPlanejamentoContent() {
 
   async function handleSalvarProdRapidoEAdicionar(e: React.FormEvent) {
     e.preventDefault();
-    if (!groupId || !nomeProdRapido.trim()) return;
+    const nomeLimpo = nomeProdRapido.trim();
+    if (!groupId || !nomeLimpo) return;
 
     setSalvando(true);
     try {
       const supabase = createClient();
       const marcaFinal = marcaProdRapido.trim() || null;
-      const { data: novoProd, error } = await supabase
-        .from("products")
-        .insert({
-          group_id: groupId,
-          nome: nomeProdRapido.trim(),
-          sector_id: setorProdRapidoId || null,
-          unidade: unidadeProdRapido,
-          emoji: emojiProdRapido.trim() || null,
-          ativo: true,
-        })
-        .select()
-        .single();
 
-      if (error || !novoProd) throw error;
-      const p = novoProd as Product;
+      // Evita duplicar produto se já existir um com o mesmo nome no catálogo
+      const existenteCat = produtos.find(
+        (x) => x.nome.trim().toLowerCase() === nomeLimpo.toLowerCase()
+      );
+
+      let p: Product;
+      if (existenteCat) {
+        const { data: prodAtualizado, error: errUpd } = await supabase
+          .from("products")
+          .update({
+            nome: nomeLimpo,
+            sector_id: setorProdRapidoId || existenteCat.sector_id || null,
+            unidade: unidadeProdRapido || existenteCat.unidade,
+            emoji: emojiProdRapido.trim() || existenteCat.emoji || null,
+            ativo: true,
+          })
+          .eq("id", existenteCat.id)
+          .select()
+          .single();
+        if (errUpd || !prodAtualizado) throw errUpd;
+        p = prodAtualizado as Product;
+      } else {
+        const { data: novoProd, error } = await supabase
+          .from("products")
+          .insert({
+            group_id: groupId,
+            nome: nomeLimpo,
+            sector_id: setorProdRapidoId || null,
+            unidade: unidadeProdRapido,
+            emoji: emojiProdRapido.trim() || null,
+            ativo: true,
+          })
+          .select()
+          .single();
+
+        if (error || !novoProd) throw error;
+        p = novoProd as Product;
+      }
 
       const valPreco = parseDecimalBR(precoProdRapido);
       const mktId = carrinhoAtual?.market_id || mercadoPadraoId;
@@ -1834,15 +1892,29 @@ function CompraPlanejamentoContent() {
         </div>
       )}
 
-      {/* BOTTOM SHEET: EDITAR ITEM DO CARRINHO (Quantidade, Marca, Preço estimado) */}
+      {/* BOTTOM SHEET: EDITAR ITEM DO CARRINHO (Quantidade, Marca, Preço estimado e Renomear Produto) */}
       {itemEditando && (
         <div className="fixed inset-0 z-50 bg-black/45 flex items-end justify-center">
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-extrabold">
-                  {mapaProdutos.get(itemEditando.product_id)?.nome || "Item"}
-                </h3>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-extrabold truncate">
+                    {nomeProdutoEditandoItem.trim() ||
+                      mapaProdutos.get(itemEditando.product_id)?.nome ||
+                      "Item"}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditandoNomeProdutoNoItem(!editandoNomeProdutoNoItem)
+                    }
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-light text-primary text-[11px] font-bold shrink-0 cursor-pointer"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Renomear produto</span>
+                  </button>
+                </div>
                 <p className="text-xs text-text-muted">
                   Ajustar quantidade, marca ou estimativa
                 </p>
@@ -1850,7 +1922,7 @@ function CompraPlanejamentoContent() {
               <button
                 type="button"
                 onClick={() => setItemEditando(null)}
-                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-text-muted cursor-pointer"
+                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-text-muted shrink-0 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1860,12 +1932,50 @@ function CompraPlanejamentoContent() {
               onSubmit={handleSalvarEdicaoItem}
               className="flex flex-col gap-3.5"
             >
+              {editandoNomeProdutoNoItem && (
+                <div className="p-3.5 rounded-2xl bg-background border border-primary/40 flex flex-col gap-2.5">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-primary">
+                      Nome no cadastro geral (ex: Refrigerante 2L)
+                    </label>
+                    <input
+                      type="text"
+                      value={nomeProdutoEditandoItem}
+                      onChange={(e) =>
+                        setNomeProdutoEditandoItem(e.target.value)
+                      }
+                      placeholder="Nome do produto"
+                      className="w-full h-11 px-3.5 rounded-xl bg-card border border-border text-sm font-bold text-text-main focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-text-muted">
+                      Unidade de medida
+                    </label>
+                    <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      {UNIDADES_RAPIDAS.map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setUnidadeProdutoEditandoItem(u)}
+                          className={`h-8 px-3 rounded-lg text-xs font-bold shrink-0 border cursor-pointer ${
+                            unidadeProdutoEditandoItem === u
+                              ? "bg-primary text-white border-primary"
+                              : "bg-card text-text-main border-border"
+                          }`}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-bold text-text-muted">
-                    Quantidade (
-                    {mapaProdutos.get(itemEditando.product_id)?.unidade || "un"}
-                    )
+                    Quantidade ({unidadeProdutoEditandoItem || "un"})
                   </label>
                   <input
                     type="text"
