@@ -1421,7 +1421,7 @@ function CompraPlanejamentoContent() {
 
               {/* Dropdown de sugestões instantâneas da busca */}
               {buscaProduto.trim().length > 0 && (
-                <div className="bg-card border border-border rounded-2xl shadow-lg overflow-hidden divide-y divide-border z-20">
+                <div className="bg-card border border-border rounded-2xl shadow-lg overflow-hidden divide-y divide-border z-20 max-h-72 overflow-y-auto overscroll-contain">
                   {resultadosBusca.map((prod) => {
                     const setor = prod.sector_id
                       ? mapaSetores.get(prod.sector_id)
@@ -1431,23 +1431,26 @@ function CompraPlanejamentoContent() {
                       <button
                         key={prod.id}
                         type="button"
-                        onClick={() => handleAdicionarProdutoAoCarrinho(prod)}
-                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-background text-left cursor-pointer"
+                        onClick={() => {
+                          (document.activeElement as HTMLElement)?.blur();
+                          handleAdicionarProdutoAoCarrinho(prod);
+                        }}
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-background text-left cursor-pointer transition-colors"
                       >
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-lg">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-lg shrink-0">
                             {prod.emoji || setor?.emoji || "📦"}
                           </span>
-                          <div>
-                            <div className="text-sm font-bold text-text-main">
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-text-main truncate">
                               {prod.nome}
                             </div>
-                            <div className="text-[11px] text-text-muted">
+                            <div className="text-[11px] text-text-muted truncate">
                               {setor?.nome || "Sem setor"} · {prod.unidade}
                             </div>
                           </div>
                         </div>
-                        <span className="h-8 px-3 rounded-full bg-primary-light text-primary font-bold text-xs flex items-center gap-1">
+                        <span className="h-8 px-3 rounded-full bg-primary-light text-primary font-bold text-xs flex items-center gap-1 shrink-0">
                           <Plus className="w-3.5 h-3.5" />
                           <span>{noCarrinho ? "Mais 1" : "Adicionar"}</span>
                         </span>
@@ -1458,14 +1461,17 @@ function CompraPlanejamentoContent() {
                   {/* Opção para cadastrar rápido se não encontrou */}
                   <button
                     type="button"
-                    onClick={abrirCadastroRapidoDaBusca}
-                    className="w-full px-4 py-3 bg-primary-light/50 hover:bg-primary-light flex items-center justify-between text-left cursor-pointer"
+                    onClick={() => {
+                      (document.activeElement as HTMLElement)?.blur();
+                      abrirCadastroRapidoDaBusca();
+                    }}
+                    className="w-full px-4 py-3 bg-primary-light/50 hover:bg-primary-light flex items-center justify-between text-left cursor-pointer transition-colors"
                   >
-                    <span className="text-xs font-extrabold text-primary-hover">
+                    <span className="text-xs font-extrabold text-primary-hover truncate">
                       + Cadastrar &ldquo;{buscaProduto.trim()}&rdquo; e colocar
                       no carrinho
                     </span>
-                    <ArrowRight className="w-4 h-4 text-primary" />
+                    <ArrowRight className="w-4 h-4 text-primary shrink-0 ml-2" />
                   </button>
                 </div>
               )}
@@ -1713,7 +1719,7 @@ function CompraPlanejamentoContent() {
       {/* BOTTOM SHEET: CRIAR / EDITAR CARRINHO E MERCADO */}
       {sheetCarrinhoAberto && (
         <div className="fixed inset-0 z-50 bg-black/45 flex items-end justify-center">
-          <div className="w-full max-w-md bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-extrabold">
                 {modoSheetCarrinho === "novo"
@@ -1805,7 +1811,7 @@ function CompraPlanejamentoContent() {
       {/* BOTTOM SHEET: EDITAR ITEM DO CARRINHO (Quantidade, Marca, Preço estimado) */}
       {itemEditando && (
         <div className="fixed inset-0 z-50 bg-black/45 flex items-end justify-center">
-          <div className="w-full max-w-md bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-extrabold">
@@ -1945,7 +1951,7 @@ function CompraPlanejamentoContent() {
       {/* BOTTOM SHEET: CADASTRO RÁPIDO DE PRODUTO A PARTIR DA BUSCA */}
       {sheetNovoProdRapido && (
         <div className="fixed inset-0 z-50 bg-black/45 flex items-end justify-center">
-          <div className="w-full max-w-md bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-extrabold">
                 Cadastrar e adicionar ao carrinho
