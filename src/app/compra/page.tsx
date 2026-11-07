@@ -1418,68 +1418,20 @@ function CompraPlanejamentoContent() {
             <div className="h-48 bg-border/70 rounded-card animate-pulse" />
           </div>
         ) : (
-          <>
-            {/* CARD DE ESTIMATIVA GERAL DO CARRINHO + MERCADO ESCOLHIDO */}
-            <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3 shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs font-semibold text-text-muted">
-                    Total estimado · {itensCarrinho.length}{" "}
-                    {itensCarrinho.length === 1 ? "item" : "itens"}
-                  </div>
-                  <div className="text-3xl font-extrabold text-text-main mt-0.5">
-                    {formatarMoeda(totalEstimadoCarrinho)}
-                  </div>
-                </div>
-
-                {/* Pílula de escolha de mercado (uma vez por carrinho) */}
-                <button
-                  type="button"
-                  onClick={
-                    carrinhoAtual
-                      ? abrirModalEditarCarrinho
-                      : abrirModalNovoCarrinho
-                  }
-                  className="h-11 px-3.5 rounded-full bg-background border border-border hover:border-primary flex items-center gap-1.5 text-xs font-bold text-text-main shrink-0 cursor-pointer"
-                >
-                  <Store className="w-4 h-4 text-primary" />
-                  <span className="max-w-[120px] truncate">
-                    {mercadoAtualNome}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-text-muted" />
-                </button>
-              </div>
-
-              {/* Avisos singelos de orçamento (Seção 6: uma linha pequena, sem pop-up) */}
-              {setoresEstourados.length > 0 && (
-                <div className="flex flex-col gap-1 pt-2 border-t border-border">
-                  {setoresEstourados.map((st) => (
-                    <div
-                      key={st.sectorId}
-                      className="text-xs font-bold text-budget-red-text flex items-center gap-1.5"
-                    >
-                      <span className="w-2 h-2 rounded-full bg-budget-red shrink-0" />
-                      <span>
-                        Esse carrinho estoura {st.nome} em{" "}
-                        {formatarMoeda(st.valorEstouro)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* COLUNA ESQUERDA (Desktop: 7 colunas) — Itens e Busca */}
+            <div className="lg:col-span-7 flex flex-col gap-4 order-2 lg:order-1">
+              {/* BLOCO "COSTUMO COMPRAR" (Seção 6 — fácil de remover) */}
+              {EXIBIR_COSTUMO_COMPRAR && (
+                <FrequentProductsBar
+                  produtos={produtos}
+                  setores={setores}
+                  precos={precos}
+                  contagemFrequenciaCarrinhos={frequenciaProdutos}
+                  idsNoCarrinhoAtual={idsNoCarrinhoAtual}
+                  onAddProduct={handleAdicionarProdutoAoCarrinho}
+                />
               )}
-            </section>
-
-            {/* BLOCO "COSTUMO COMPRAR" (Seção 6 — fácil de remover) */}
-            {EXIBIR_COSTUMO_COMPRAR && (
-              <FrequentProductsBar
-                produtos={produtos}
-                setores={setores}
-                precos={precos}
-                contagemFrequenciaCarrinhos={frequenciaProdutos}
-                idsNoCarrinhoAtual={idsNoCarrinhoAtual}
-                onAddProduct={handleAdicionarProdutoAoCarrinho}
-              />
-            )}
 
             {/* BUSCA RÁPIDA PARA ADICIONAR PRODUTO AO CARRINHO */}
             <div className="relative flex flex-col gap-1.5">
@@ -1778,32 +1730,86 @@ function CompraPlanejamentoContent() {
                 })}
               </div>
             )}
+          </div>
 
-            {/* Botão de iniciar modo mercado */}
-            {carrinhoAtual && itensCarrinho.length > 0 && (
-              <div className="pt-2">
+          {/* COLUNA DIREITA (Desktop: 5 colunas sticky) — Estimativa e Ação */}
+          <div className="lg:col-span-5 flex flex-col gap-4 order-1 lg:order-2 lg:sticky lg:top-6">
+            {/* CARD DE ESTIMATIVA GERAL DO CARRINHO + MERCADO ESCOLHIDO */}
+            <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-semibold text-text-muted">
+                    Total estimado · {itensCarrinho.length}{" "}
+                    {itensCarrinho.length === 1 ? "item" : "itens"}
+                  </div>
+                  <div className="text-3xl font-extrabold text-text-main mt-0.5">
+                    {formatarMoeda(totalEstimadoCarrinho)}
+                  </div>
+                </div>
+
+                {/* Pílula de escolha de mercado (uma vez por carrinho) */}
                 <button
                   type="button"
-                  onClick={handleIniciarModoMercado}
-                  className="w-full h-12 rounded-btn bg-primary hover:bg-primary-hover text-white font-extrabold text-[15px] flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  onClick={
+                    carrinhoAtual
+                      ? abrirModalEditarCarrinho
+                      : abrirModalNovoCarrinho
+                  }
+                  className="h-11 px-3.5 rounded-full bg-background border border-border hover:border-primary flex items-center gap-1.5 text-xs font-bold text-text-main shrink-0 cursor-pointer shadow-sm"
                 >
-                  <ShoppingCart className="w-5 h-5" />
-                  <span>
-                    {carrinhoAtual.status === "em_compra"
-                      ? "Compra em andamento no mercado"
-                      : "Iniciar compra no mercado"}
+                  <Store className="w-4 h-4 text-primary" />
+                  <span className="max-w-[120px] truncate">
+                    {mercadoAtualNome}
                   </span>
+                  <ChevronDown className="w-4 h-4 text-text-muted" />
                 </button>
               </div>
-            )}
-          </>
+
+              {/* Avisos singelos de orçamento (Seção 6: uma linha pequena, sem pop-up) */}
+              {setoresEstourados.length > 0 && (
+                <div className="flex flex-col gap-1 pt-2 border-t border-border">
+                  {setoresEstourados.map((st) => (
+                    <div
+                      key={st.sectorId}
+                      className="text-xs font-bold text-budget-red-text flex items-center gap-1.5"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-budget-red shrink-0" />
+                      <span>
+                        Esse carrinho estoura {st.nome} em{" "}
+                        {formatarMoeda(st.valorEstouro)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Botão de iniciar modo mercado */}
+              {carrinhoAtual && itensCarrinho.length > 0 && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleIniciarModoMercado}
+                    className="w-full h-12 rounded-btn bg-primary hover:bg-primary-hover text-white font-extrabold text-[15px] flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-colors"
+                  >
+                    <ShoppingCart className="w-5 h-5" />
+                    <span>
+                      {carrinhoAtual.status === "em_compra"
+                        ? "Continuar compra no mercado"
+                        : "Iniciar compra no mercado"}
+                    </span>
+                  </button>
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
         )}
       </main>
 
-      {/* BOTTOM SHEET: CRIAR / EDITAR CARRINHO E MERCADO */}
+      {/* MODAL / BOTTOM SHEET: CRIAR / EDITAR CARRINHO E MERCADO */}
       {sheetCarrinhoAberto && (
-        <div className="fixed inset-0 z-50 bg-black/45 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[92dvh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-extrabold">
                 {modoSheetCarrinho === "novo"
@@ -1892,10 +1898,10 @@ function CompraPlanejamentoContent() {
         </div>
       )}
 
-      {/* BOTTOM SHEET: EDITAR ITEM DO CARRINHO (Quantidade, Marca, Preço estimado e Renomear Produto) */}
+      {/* MODAL / BOTTOM SHEET: EDITAR ITEM DO CARRINHO (Quantidade, Marca, Preço estimado e Renomear Produto) */}
       {itemEditando && (
-        <div className="fixed inset-0 z-50 bg-black/45 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[92dvh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -2084,10 +2090,10 @@ function CompraPlanejamentoContent() {
         </div>
       )}
 
-      {/* BOTTOM SHEET: CADASTRO RÁPIDO DE PRODUTO A PARTIR DA BUSCA */}
+      {/* MODAL / BOTTOM SHEET: CADASTRO RÁPIDO DE PRODUTO A PARTIR DA BUSCA */}
       {sheetNovoProdRapido && (
-        <div className="fixed inset-0 z-50 bg-black/45 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[92dvh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-extrabold">
                 Cadastrar e adicionar ao carrinho
@@ -2218,8 +2224,8 @@ function CompraPlanejamentoContent() {
 
       {/* MODAL DE DECISÃO: AGRUPAR VS. SEPARAR PRODUTO JÁ EXISTENTE */}
       {produtoConflitoAdicao && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[1px] flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[92dvh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
               <div className="min-w-0">
                 <h3 className="text-lg font-extrabold text-text-main truncate">

@@ -1394,7 +1394,7 @@ export default function LiveMarketMode({
     <div className="min-h-screen flex flex-col bg-background text-text-main w-full max-w-full overflow-x-hidden">
       {/* TOPO FIXO DO MODO MERCADO (Fiel a 2-modo-mercado.html) */}
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b border-border/60">
-        <div className="w-full max-w-md mx-auto">
+        <div className="w-full max-w-md md:max-w-2xl lg:max-w-3xl mx-auto">
           {/* Linha 1: Botão Fechar (X), Seletor de Mercado e Status Salvo */}
           <div className="flex items-center gap-3 px-4 pt-3 pb-1">
             <button
@@ -1488,7 +1488,7 @@ export default function LiveMarketMode({
       </header>
 
       {/* LISTA DE SETORES E ITENS (Com espaço extra pb-44 no fim para o botão "+" nunca cobrir o último item — Seção 7) */}
-      <main className="flex-1 w-full max-w-md mx-auto px-4 pt-3 pb-44 flex flex-col gap-3 min-w-0 max-w-full">
+      <main className="flex-1 w-full max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-4 pt-3 pb-44 flex flex-col gap-3 min-w-0 max-w-full">
         {erro && (
           <div className="bg-budget-red-bg text-budget-red-text px-4 py-2.5 rounded-2xl text-xs font-semibold flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1749,7 +1749,7 @@ export default function LiveMarketMode({
 
       {/* BOTÃO FLUTUANTE "+" PARA ADICIONAR PRODUTO RÁPIDO (56x56px conforme 2-modo-mercado.html) */}
       <div className="fixed bottom-24 left-0 right-0 pointer-events-none z-30">
-        <div className="w-full max-w-md mx-auto px-5 flex justify-end">
+        <div className="w-full max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-5 flex justify-end">
           <button
             type="button"
             onClick={() => {
@@ -1767,7 +1767,7 @@ export default function LiveMarketMode({
 
       {/* RODAPÉ FIXO COM BOTÃO "FINALIZAR COMPRA" (Fiel a 2-modo-mercado.html) */}
       <footer className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-30">
-        <div className="w-full max-w-md mx-auto px-4 pt-3 pb-5">
+        <div className="w-full max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-4 pt-3 pb-5">
           <button
             type="button"
             onClick={abrirModalFinalizarCompra}
@@ -1779,11 +1779,11 @@ export default function LiveMarketMode({
       </footer>
 
       {/* =====================================================================
-          BOTTOM SHEET 1: PREÇO DO ITEM (Fiel a 3-preco-do-item.html)
+          MODAL / BOTTOM SHEET 1: PREÇO DO ITEM (Fiel a 3-preco-do-item.html)
          ===================================================================== */}
       {itemPrecoAtivo && produtoAtivoSheet && comparacaoItemAtivo && (
-        <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[94dvh] overflow-y-auto bg-card rounded-t-[24px] px-5 pt-3 pb-5 flex flex-col">
+        <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[94dvh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl px-5 pt-3 pb-5 flex flex-col shadow-2xl animate-in fade-in duration-200">
             {/* Puxador */}
             <div className="w-10 h-1 rounded-full bg-[#D5D8E2] mx-auto mb-3" />
 
@@ -2236,11 +2236,11 @@ export default function LiveMarketMode({
       )}
 
       {/* =====================================================================
-          BOTTOM SHEET 2: ESCOLHER MERCADO
+          MODAL / BOTTOM SHEET 2: ESCOLHER MERCADO
          ===================================================================== */}
       {sheetMercadoAberto && (
-        <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end justify-center">
-          <div className="w-full max-w-md bg-card rounded-t-[24px] p-5 flex flex-col gap-3">
+        <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-3 shadow-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-extrabold">Mercado desta compra</h3>
               <button
@@ -2279,11 +2279,11 @@ export default function LiveMarketMode({
       )}
 
       {/* =====================================================================
-          BOTTOM SHEET 3: BOTÃO FLUTUANTE "+" (ADICIONAR PRODUTO NO MERCADO)
+          MODAL / BOTTOM SHEET 3: BOTÃO FLUTUANTE "+" (ADICIONAR PRODUTO NO MERCADO)
          ===================================================================== */}
       {sheetAdicionarAberto && (
-        <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[90dvh] sm:max-h-[85vh] bg-card rounded-t-[24px] p-4 sm:p-5 flex flex-col min-h-0">
+        <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[90dvh] sm:max-h-[85vh] bg-card rounded-t-[24px] md:rounded-2xl p-4 sm:p-5 flex flex-col min-h-0 shadow-2xl animate-in fade-in duration-200">
             {/* Topo fixo: Título e Botão Fechar */}
             <div className="flex items-center justify-between shrink-0 mb-3">
               <h3 className="text-lg font-extrabold text-text-main">
@@ -2483,8 +2483,8 @@ export default function LiveMarketMode({
           MODAL DE DECISÃO: AGRUPAR VS. SEPARAR PRODUTO JÁ EXISTENTE AO VIVO
          ===================================================================== */}
       {produtoConflitoAoVivo && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-[2px] flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-[2px] flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[90dvh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
               <div className="min-w-0">
                 <h3 className="text-lg font-extrabold text-text-main truncate">
@@ -2595,11 +2595,11 @@ export default function LiveMarketMode({
       )}
 
       {/* =====================================================================
-          BOTTOM SHEET 4: FINALIZAR COMPRA COM PAGAMENTO MISTO (Seção 6)
+          MODAL / BOTTOM SHEET 4: FINALIZAR COMPRA COM PAGAMENTO MISTO (Seção 6)
          ===================================================================== */}
       {sheetFinalizarAberto && (
-        <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-[#14171F]/50 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[92vh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-extrabold">Finalizar compra</h3>
