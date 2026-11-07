@@ -124,4 +124,11 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Classes Responsivas Globais ([src/app/globals.css](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/globals.css)):** Adicionados utilitários para centralização e flutuação de modais em telas médias/grandes, evitando que fiquem colados no rodapé como gavetas em monitores grandes.
 - **Alinhamento dos Containers das Páginas ([src/app/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/page.tsx), [src/app/compra/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/compra/page.tsx), [src/app/produtos/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/produtos/page.tsx), [src/app/orcamento/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/orcamento/page.tsx), [src/app/mais/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/page.tsx), [src/app/historico/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/historico/page.tsx), [src/app/exportar/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/exportar/page.tsx)):** Adicionado o espaçamento lateral `md:pl-64` e limites responsivos amplos (`md:max-w-4xl lg:max-w-6xl`) para preparar a expansão do conteúdo em telas grandes.
 
+---
+
+## Design Responsivo — Etapa 2: Tela Início em 2 Colunas (Dashboard Desktop)
+- **Grid de 2 Colunas no Computador ([src/app/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/page.tsx)):** Estruturada a tela inicial com grade responsiva (`grid-cols-1 lg:grid-cols-12`). Na coluna da esquerda (`lg:col-span-7`), ficam o Card do Mês (gasto × orçamento e alertas), o Card de Continuar Compra e o botão de Nova Compra. Na coluna da direita (`lg:col-span-5`), ficam os Últimos Carrinhos (com repetição rápida) e o Card de Gestão do Grupo e Convites.
+- **Preservação Mobile:** No celular (`< lg`), os blocos mantêm o fluxo vertical idêntico à referência original `1-inicio.html`.
+
+
 

@@ -448,330 +448,354 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-text-main pb-24 md:pb-8 md:pl-64">
-      <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-3.5">
+      <main className="flex-1 w-full max-w-md md:max-w-5xl lg:max-w-6xl mx-auto px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-5">
         {/* Topo conforme referência 1-inicio.html */}
         <div className="flex items-start justify-between">
           <div>
             <div className="text-[13px] text-text-muted font-medium">
               {mesAnoFormatado} · {grupo.nome}
             </div>
-            <h1 className="text-[28px] font-extrabold leading-tight">Início</h1>
+            <h1 className="text-[28px] md:text-[32px] font-extrabold leading-tight">
+              Início
+            </h1>
           </div>
           <button
             type="button"
             onClick={handleSair}
             title="Sair da conta"
-            className="h-11 px-3.5 rounded-full bg-card border border-border flex items-center gap-1.5 text-xs font-bold text-text-muted hover:text-text-main cursor-pointer"
+            className="h-11 px-3.5 rounded-full bg-card border border-border flex items-center gap-1.5 text-xs font-bold text-text-muted hover:text-text-main cursor-pointer shadow-sm transition-colors"
           >
             <LogOut className="w-4 h-4" />
             <span>Sair</span>
           </button>
         </div>
 
-        {/* Card do Mês (Gasto × Orçamento + Chips de Setores em Alerta) conforme 1-inicio.html */}
-        <Link
-          href="/orcamento"
-          className="block bg-card border border-border rounded-[20px] px-[18px] py-4 hover:border-primary/50 transition-colors"
-        >
-          <div className="text-[13px] text-text-muted font-semibold">
-            Gasto em {nomeMesMinusculo}
-          </div>
-          <div className="flex items-baseline gap-2 mt-1 flex-wrap">
-            <span className="text-[30px] font-extrabold leading-none">
-              {formatarMoeda(gastoTotalMes)}
-            </span>
-            <span className="text-[14px] text-text-muted">
-              {orcamentoTotalMes > 0
-                ? `de ${formatarMoeda(orcamentoTotalMes)}`
-                : "toque para definir o orçamento"}
-            </span>
-          </div>
-
-          <div className="h-[10px] rounded-[5px] bg-border mt-2.5 overflow-hidden">
-            <div
-              className="h-full rounded-[5px] transition-all duration-300"
-              style={{
-                width: `${larguraBarraMes}%`,
-                backgroundColor: corBarraMes,
-              }}
-            />
-          </div>
-
-          <div className="text-[12px] text-text-muted mt-2">
-            {orcamentoTotalMes <= 0 ? (
-              <span>Toque aqui para configurar os limites por setor</span>
-            ) : gastoTotalMes <= orcamentoTotalMes ? (
-              <span>
-                {percentualTotalMes}% do orçamento · faltam{" "}
-                {formatarMoeda(orcamentoTotalMes - gastoTotalMes)}
-              </span>
-            ) : (
-              <span className="font-bold text-budget-red-text">
-                {percentualTotalMes}% do orçamento · acima em{" "}
-                {formatarMoeda(gastoTotalMes - orcamentoTotalMes)}
-              </span>
-            )}
-          </div>
-
-          {setoresEmAlerta.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-3">
-              {setoresEmAlerta.map((alerta) => (
-                <span
-                  key={alerta.id}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-bold"
-                  style={{
-                    backgroundColor: alerta.estourou ? "#FCEBEA" : "#FFF3D6",
-                    color: alerta.estourou ? "#B3261E" : "#7A5000",
-                  }}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{
-                      backgroundColor: alerta.estourou ? "#D64545" : "#E8A200",
-                    }}
-                  />
-                  <span>
-                    {alerta.nomeCurto} {alerta.percentual}%
-                  </span>
+        {/* Grade Responsiva: 1 coluna no celular, 2 colunas amplas no desktop */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* COLUNA ESQUERDA (Desktop: 7 colunas) — Visão Financeira e Ação Rápida */}
+          <div className="lg:col-span-7 flex flex-col gap-4">
+            {/* Card do Mês (Gasto × Orçamento + Chips de Setores em Alerta) conforme 1-inicio.html */}
+            <Link
+              href="/orcamento"
+              className="block bg-card border border-border rounded-[20px] px-5 py-4 hover:border-primary/50 transition-colors shadow-sm"
+            >
+              <div className="text-[13px] text-text-muted font-semibold">
+                Gasto em {nomeMesMinusculo}
+              </div>
+              <div className="flex items-baseline gap-2 mt-1 flex-wrap">
+                <span className="text-[32px] font-extrabold leading-none">
+                  {formatarMoeda(gastoTotalMes)}
                 </span>
-              ))}
-            </div>
-          )}
-        </Link>
+                <span className="text-[14px] text-text-muted font-medium">
+                  {orcamentoTotalMes > 0
+                    ? `de ${formatarMoeda(orcamentoTotalMes)}`
+                    : "toque para definir o orçamento"}
+                </span>
+              </div>
 
-        {/* Card Continuar Compra (quando houver uma planejada ou em andamento — fiel a 1-inicio.html) */}
-        {carrinhoAtivo && (
-          <Link
-            href={`/compra?id=${carrinhoAtivo.id}`}
-            className="block bg-primary text-white rounded-[20px] px-[18px] py-4 shadow-sm"
-          >
-            <div className="text-xs font-semibold text-primary-soft">
-              {carrinhoAtivo.status === "em_compra"
-                ? "Compra em andamento"
-                : "Carrinho em planejamento"}
-            </div>
-            <div className="text-[20px] font-extrabold mt-1">
-              {carrinhoAtivo.nome}
-            </div>
-            <div className="text-[13px] text-primary-soft mt-0.5">
-              {carrinhoAtivo.market_id
-                ? `${mercados.find((m) => m.id === carrinhoAtivo.market_id)?.nome || "Mercado"} · `
-                : ""}
-              {carrinhoAtivo.status === "em_compra"
-                ? `${qtdMarcadosAtivo} de ${qtdItensAtivo} ${qtdItensAtivo === 1 ? "item" : "itens"}`
-                : `${qtdItensAtivo} ${qtdItensAtivo === 1 ? "item" : "itens"} na lista`}
-            </div>
-            {qtdItensAtivo > 0 && (
-              <div className="h-[6px] rounded-[3px] bg-white/25 mt-2.5 overflow-hidden">
+              <div className="h-[10px] rounded-[5px] bg-border mt-2.5 overflow-hidden">
                 <div
-                  className="h-full bg-white transition-all duration-300"
+                  className="h-full rounded-[5px] transition-all duration-300"
                   style={{
-                    width: `${
-                      carrinhoAtivo.status === "em_compra"
-                        ? Math.round((qtdMarcadosAtivo / qtdItensAtivo) * 100)
-                        : 100
-                    }%`,
+                    width: `${larguraBarraMes}%`,
+                    backgroundColor: corBarraMes,
                   }}
                 />
               </div>
+
+              <div className="text-[12px] text-text-muted mt-2">
+                {orcamentoTotalMes <= 0 ? (
+                  <span>Toque aqui para configurar os limites por setor</span>
+                ) : gastoTotalMes <= orcamentoTotalMes ? (
+                  <span>
+                    {percentualTotalMes}% do orçamento · faltam{" "}
+                    {formatarMoeda(orcamentoTotalMes - gastoTotalMes)}
+                  </span>
+                ) : (
+                  <span className="font-bold text-budget-red-text">
+                    {percentualTotalMes}% do orçamento · acima em{" "}
+                    {formatarMoeda(gastoTotalMes - orcamentoTotalMes)}
+                  </span>
+                )}
+              </div>
+
+              {setoresEmAlerta.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {setoresEmAlerta.map((alerta) => (
+                    <span
+                      key={alerta.id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-bold"
+                      style={{
+                        backgroundColor: alerta.estourou
+                          ? "#FCEBEA"
+                          : "#FFF3D6",
+                        color: alerta.estourou ? "#B3261E" : "#7A5000",
+                      }}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{
+                          backgroundColor: alerta.estourou
+                            ? "#D64545"
+                            : "#E8A200",
+                        }}
+                      />
+                      <span>
+                        {alerta.nomeCurto} {alerta.percentual}%
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </Link>
+
+            {/* Card Continuar Compra (quando houver uma planejada ou em andamento) */}
+            {carrinhoAtivo && (
+              <Link
+                href={`/compra?id=${carrinhoAtivo.id}`}
+                className="block bg-primary text-white rounded-[20px] px-5 py-4 shadow-sm hover:bg-primary-hover transition-colors"
+              >
+                <div className="text-xs font-semibold text-primary-soft">
+                  {carrinhoAtivo.status === "em_compra"
+                    ? "Compra em andamento"
+                    : "Carrinho em planejamento"}
+                </div>
+                <div className="text-[20px] font-extrabold mt-1">
+                  {carrinhoAtivo.nome}
+                </div>
+                <div className="text-[13px] text-primary-soft mt-0.5">
+                  {carrinhoAtivo.market_id
+                    ? `${
+                        mercados.find((m) => m.id === carrinhoAtivo.market_id)
+                          ?.nome || "Mercado"
+                      } · `
+                    : ""}
+                  {carrinhoAtivo.status === "em_compra"
+                    ? `${qtdMarcadosAtivo} de ${qtdItensAtivo} ${
+                        qtdItensAtivo === 1 ? "item" : "itens"
+                      }`
+                    : `${qtdItensAtivo} ${
+                        qtdItensAtivo === 1 ? "item" : "itens"
+                      } na lista`}
+                </div>
+                {qtdItensAtivo > 0 && (
+                  <div className="h-[6px] rounded-[3px] bg-white/25 mt-2.5 overflow-hidden">
+                    <div
+                      className="h-full bg-white transition-all duration-300"
+                      style={{
+                        width: `${
+                          carrinhoAtivo.status === "em_compra"
+                            ? Math.round((qtdMarcadosAtivo / qtdItensAtivo) * 100)
+                            : 100
+                        }%`,
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="mt-3.5 h-12 rounded-btn bg-white text-primary font-extrabold text-[15px] flex items-center justify-center gap-2">
+                  <span>Continuar compra</span>
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </Link>
             )}
-            <div className="mt-3.5 h-12 rounded-btn bg-white text-primary font-extrabold text-[15px] flex items-center justify-center gap-2">
-              <span>Continuar compra</span>
-              <ArrowRight className="w-4 h-4" />
-            </div>
-          </Link>
-        )}
 
-        {/* Botão Nova Compra conforme 1-inicio.html */}
-        <Link
-          href="/compra?nova=1"
-          className="h-12 rounded-btn border-2 border-primary text-primary font-bold text-[15px] bg-card hover:bg-primary-light/40 flex items-center justify-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nova compra</span>
-        </Link>
-
-        {/* Últimos carrinhos com botão "Repetir" (fiel a 1-inicio.html) */}
-        <div className="flex flex-col gap-2.5 mt-0.5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[16px] font-extrabold">Últimos carrinhos</h2>
+            {/* Botão Nova Compra conforme 1-inicio.html */}
             <Link
-              href="/historico"
-              className="text-xs font-bold text-primary hover:underline"
+              href="/compra?nova=1"
+              className="h-12 rounded-btn border-2 border-primary text-primary font-bold text-[15px] bg-card hover:bg-primary-light/40 flex items-center justify-center gap-2 transition-colors shadow-sm"
             >
-              Ver histórico
+              <Plus className="w-4 h-4" />
+              <span>Nova compra</span>
             </Link>
           </div>
 
-          {ultimosCarrinhos.length === 0 ? (
-            <div className="bg-card border border-border rounded-[16px] px-3.5 py-3 text-xs text-text-muted">
-              Suas compras finalizadas aparecerão aqui para você repetir a lista
-              com 1 toque.
-            </div>
-          ) : (
-            ultimosCarrinhos.map((resumo) => {
-              const copiando = copiandoCartId === resumo.cart.id;
-              return (
-                <div
-                  key={resumo.cart.id}
-                  className="flex items-center gap-3 bg-card border border-border rounded-[16px] px-[14px] py-[10px]"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[14px] font-bold truncate">
-                      {resumo.cart.nome}
-                    </div>
-                    <div className="text-[12px] text-text-muted">
-                      {resumo.dataCurta} · {resumo.qtdItens}{" "}
-                      {resumo.qtdItens === 1 ? "item" : "itens"} ·{" "}
-                      {formatarMoeda(resumo.total)}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={copiando}
-                    onClick={() => handleRepetirCarrinho(resumo.cart.id)}
-                    aria-label={`Repetir ${resumo.cart.nome}`}
-                    className="h-11 px-4 rounded-full bg-primary-light text-primary-hover text-[13px] font-bold flex items-center justify-center shrink-0 hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60"
-                  >
-                    {copiando ? "Copiando..." : "Repetir"}
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Card de Grupo e Convite para a segunda pessoa (Etapa 2) */}
-        <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center">
-                <Users className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-base font-extrabold leading-snug">
-                  {grupo.nome}
-                </h2>
-                <p className="text-xs text-text-muted">
-                  {membros.length}{" "}
-                  {membros.length === 1
-                    ? "pessoa no grupo"
-                    : "pessoas compartilhando"}
-                </p>
-              </div>
-            </div>
-            <span className="px-2.5 py-1 rounded-full bg-primary-light text-primary-hover text-[11px] font-bold">
-              {grupo.fuso_horario}
-            </span>
-          </div>
-
-          {/* Lista de membros atuais */}
-          <div className="flex flex-wrap gap-2 pt-1">
-            {membros.map((m, idx) => (
-              <div
-                key={m.user_id}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background border border-border text-xs font-bold"
-              >
-                <span className="w-2 h-2 rounded-full bg-primary" />
-                <span>
-                  {m.nome_exibicao || `Membro ${idx + 1}`}{" "}
-                  {m.papel === "admin" ? "(Criador)" : ""}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {erroConvite && (
-            <div className="text-xs font-semibold text-budget-red-text bg-budget-red-bg px-3 py-2 rounded-xl">
-              {erroConvite}
-            </div>
-          )}
-
-          {/* Convite ativo ou botão de gerar convite */}
-          {conviteAtivo ? (
-            <div className="bg-background border border-border rounded-2xl p-3.5 flex flex-col gap-2.5">
+          {/* COLUNA DIREITA (Desktop: 5 colunas) — Últimos Carrinhos e Gestão do Grupo */}
+          <div className="lg:col-span-5 flex flex-col gap-4">
+            {/* Últimos carrinhos com botão "Repetir" (fiel a 1-inicio.html) */}
+            <div className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-text-muted">
-                  Convite ativo para a 2ª pessoa:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleExcluirConvite(conviteAtivo.id)}
-                  className="text-xs text-text-muted hover:text-budget-red flex items-center gap-1 cursor-pointer"
+                <h2 className="text-[16px] font-extrabold">Últimos carrinhos</h2>
+                <Link
+                  href="/historico"
+                  className="text-xs font-bold text-primary hover:underline"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Cancelar</span>
-                </button>
+                  Ver histórico
+                </Link>
               </div>
 
-              <div className="text-xl font-extrabold tracking-widest text-primary">
-                {conviteAtivo.codigo}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    copiarParaAreaDeTransferencia(
-                      conviteAtivo.codigo,
-                      "codigo"
-                    )
-                  }
-                  className="h-11 rounded-xl bg-card border border-border font-bold text-xs text-text-main flex items-center justify-center gap-1.5 hover:border-primary cursor-pointer"
-                >
-                  {copiadoTexto === "codigo" ? (
-                    <>
-                      <Check className="w-4 h-4 text-primary" />
-                      <span>Código copiado!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4 text-text-muted" />
-                      <span>Copiar código</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    copiarParaAreaDeTransferencia(linkConvite, "link")
-                  }
-                  className="h-11 rounded-xl bg-primary text-white font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-primary-hover cursor-pointer"
-                >
-                  {copiadoTexto === "link" ? (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>Link copiado!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      <span>Copiar link</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <p className="text-[11px] text-text-muted leading-snug">
-                Envie o link ou o código no WhatsApp. O convite é de uso único.
-              </p>
+              {ultimosCarrinhos.length === 0 ? (
+                <div className="bg-background border border-border rounded-[16px] px-3.5 py-3 text-xs text-text-muted">
+                  Suas compras finalizadas aparecerão aqui para você repetir a lista
+                  com 1 toque.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {ultimosCarrinhos.map((resumo) => {
+                    const copiando = copiandoCartId === resumo.cart.id;
+                    return (
+                      <div
+                        key={resumo.cart.id}
+                        className="flex items-center gap-3 bg-background border border-border/80 rounded-[16px] px-3.5 py-2.5"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[14px] font-bold truncate">
+                            {resumo.cart.nome}
+                          </div>
+                          <div className="text-[12px] text-text-muted">
+                            {resumo.dataCurta} · {resumo.qtdItens}{" "}
+                            {resumo.qtdItens === 1 ? "item" : "itens"} ·{" "}
+                            {formatarMoeda(resumo.total)}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={copiando}
+                          onClick={() => handleRepetirCarrinho(resumo.cart.id)}
+                          aria-label={`Repetir ${resumo.cart.nome}`}
+                          className="h-10 px-3.5 rounded-full bg-primary-light text-primary-hover text-[12px] font-bold flex items-center justify-center shrink-0 hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60"
+                        >
+                          {copiando ? "Copiando..." : "Repetir"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleGerarConvite}
-              disabled={gerandoConvite}
-              className="h-12 rounded-btn border-2 border-primary text-primary font-bold text-sm bg-card hover:bg-primary-light/50 flex items-center justify-center gap-2 transition-colors cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>
-                {gerandoConvite
-                  ? "Gerando código..."
-                  : "Convidar segunda pessoa para o grupo"}
-              </span>
-            </button>
-          )}
-        </section>
+
+            {/* Card de Grupo e Convite para a segunda pessoa (Etapa 2) */}
+            <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-extrabold leading-snug">
+                      {grupo.nome}
+                    </h2>
+                    <p className="text-xs text-text-muted">
+                      {membros.length}{" "}
+                      {membros.length === 1
+                        ? "pessoa no grupo"
+                        : "pessoas compartilhando"}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-primary-light text-primary-hover text-[11px] font-bold">
+                  {grupo.fuso_horario}
+                </span>
+              </div>
+
+              {/* Lista de membros atuais */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {membros.map((m, idx) => (
+                  <div
+                    key={m.user_id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background border border-border text-xs font-bold"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-primary" />
+                    <span>
+                      {m.nome_exibicao || `Membro ${idx + 1}`}{" "}
+                      {m.papel === "admin" ? "(Criador)" : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {erroConvite && (
+                <div className="text-xs font-semibold text-budget-red-text bg-budget-red-bg px-3 py-2 rounded-xl">
+                  {erroConvite}
+                </div>
+              )}
+
+              {/* Convite ativo ou botão de gerar convite */}
+              {conviteAtivo ? (
+                <div className="bg-background border border-border rounded-2xl p-3.5 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-text-muted">
+                      Convite ativo para a 2ª pessoa:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleExcluirConvite(conviteAtivo.id)}
+                      className="text-xs text-text-muted hover:text-budget-red flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Cancelar</span>
+                    </button>
+                  </div>
+
+                  <div className="text-xl font-extrabold tracking-widest text-primary">
+                    {conviteAtivo.codigo}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copiarParaAreaDeTransferencia(
+                          conviteAtivo.codigo,
+                          "codigo"
+                        )
+                      }
+                      className="h-11 rounded-xl bg-card border border-border font-bold text-xs text-text-main flex items-center justify-center gap-1.5 hover:border-primary cursor-pointer"
+                    >
+                      {copiadoTexto === "codigo" ? (
+                        <>
+                          <Check className="w-4 h-4 text-primary" />
+                          <span>Código copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 text-text-muted" />
+                          <span>Copiar código</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copiarParaAreaDeTransferencia(linkConvite, "link")
+                      }
+                      className="h-11 rounded-xl bg-primary text-white font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-primary-hover cursor-pointer"
+                    >
+                      {copiadoTexto === "link" ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Link copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Copiar link</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-text-muted leading-snug">
+                    Envie o link ou o código no WhatsApp. O convite é de uso único.
+                  </p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGerarConvite}
+                  disabled={gerandoConvite}
+                  className="h-12 rounded-btn border-2 border-primary text-primary font-bold text-sm bg-card hover:bg-primary-light/50 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>
+                    {gerandoConvite
+                      ? "Gerando código..."
+                      : "Convidar segunda pessoa para o grupo"}
+                  </span>
+                </button>
+              )}
+            </section>
+          </div>
+        </div>
       </main>
 
       <BottomNav />
