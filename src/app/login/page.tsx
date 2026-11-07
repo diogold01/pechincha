@@ -10,6 +10,7 @@ import {
   ArrowRight,
   AlertCircle,
   CheckCircle2,
+  Sparkles,
 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
@@ -31,6 +32,7 @@ function LoginContent() {
   const [regStatus, setRegStatus] = useState<RegistrationStatus | null>(null);
   const [carregandoStatus, setCarregandoStatus] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [enviandoVisitante, setEnviandoVisitante] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
@@ -225,6 +227,58 @@ function LoginContent() {
     }
   }
 
+  async function handleEntrarVisitante() {
+    setErro(null);
+    setSucesso(null);
+    setEnviandoVisitante(true);
+    const supabase = createClient();
+
+    try {
+      const demoEmail = "visitante@pechincha.app";
+      const demoPass = "Visitante@2026";
+
+      // 1. Tenta autenticar na conta visitante padrão
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: demoEmail,
+        password: demoPass,
+      });
+
+      // 2. Se ainda não existir no Supabase, cria automaticamente
+      if (signInErr) {
+        const { error: signUpErr } = await supabase.auth.signUp({
+          email: demoEmail,
+          password: demoPass,
+          options: {
+            data: {
+              nome: "Visitante",
+            },
+          },
+        });
+
+        // Se o Supabase tiver anonymous auth ativado como fallback
+        if (signUpErr) {
+          const { error: anonErr } = await supabase.auth.signInAnonymously();
+          if (anonErr) {
+            setErro("Não foi possível acessar como visitante no momento. Tente entrar com seu e-mail.");
+            return;
+          }
+        }
+      }
+
+      // 3. Garante que o visitante já caia com o grupo configurado
+      await supabase.rpc("ensure_user_group", {
+        p_nome_exibicao: "Visitante",
+      });
+
+      router.push("/");
+      router.refresh();
+    } catch {
+      setErro("Ocorreu um erro ao conectar como visitante.");
+    } finally {
+      setEnviandoVisitante(false);
+    }
+  }
+
   return (
     <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 bg-background">
       <div className="w-full max-w-md flex flex-col gap-5">
@@ -361,7 +415,7 @@ function LoginContent() {
 
             <button
               type="submit"
-              disabled={enviando}
+              disabled={enviando || enviandoVisitante}
               className="mt-2 h-12 rounded-btn bg-primary hover:bg-primary-hover disabled:opacity-60 text-white font-extrabold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <span>
@@ -374,6 +428,31 @@ function LoginContent() {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
+
+          {/* Divisor */}
+          <div className="relative my-1 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <span className="relative bg-card px-3 text-xs font-semibold text-text-muted">
+              ou
+            </span>
+          </div>
+
+          {/* Botão de acesso rápido como visitante para recrutadores e avaliadores */}
+          <button
+            type="button"
+            onClick={handleEntrarVisitante}
+            disabled={enviando || enviandoVisitante}
+            className="h-12 rounded-btn border border-border bg-background hover:bg-primary-light/40 text-text-main hover:text-primary font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs disabled:opacity-60"
+          >
+            <Sparkles className="w-4 h-4 text-primary shrink-0" />
+            <span>
+              {enviandoVisitante
+                ? "Entrando como visitante..."
+                : "Entrar como visitante"}
+            </span>
+          </button>
         </div>
       </div>
     </main>
