@@ -7,7 +7,6 @@ import {
   Lock,
   Mail,
   User,
-  Ticket,
   ArrowRight,
   AlertCircle,
   CheckCircle2,
@@ -142,37 +141,24 @@ function LoginContent() {
       }
 
       // Modo: Criar conta
-      // Verifica se já existe grupo no sistema; se sim, exige convite válido
-      const { data: statusAtual, error: rpcError } = await supabase.rpc(
-        "check_registration_status",
-        {
-          p_invite_code: codigoConvite.trim() || null,
+      if (codigoConvite.trim()) {
+        const { data: statusAtual } = await supabase.rpc(
+          "check_registration_status",
+          {
+            p_invite_code: codigoConvite.trim(),
+          }
+        );
+
+        const status = statusAtual as RegistrationStatus | null;
+        if (
+          status?.restricted_email &&
+          status.restricted_email.toLowerCase() !== emailLimpo
+        ) {
+          setErro(
+            `Este convite foi gerado especificamente para o e-mail ${status.restricted_email}.`
+          );
+          return;
         }
-      );
-
-      if (rpcError) {
-        setErro(
-          "Não foi possível verificar o banco de dados. Confira se você já executou o arquivo supabase/schema.sql no SQL Editor do Supabase."
-        );
-        return;
-      }
-
-      const status = statusAtual as RegistrationStatus;
-      if (status.needs_invite && !status.invite_valid) {
-        setErro(
-          "O cadastro é fechado para convidados. Informe um código de convite válido enviado por quem criou o grupo."
-        );
-        return;
-      }
-
-      if (
-        status.restricted_email &&
-        status.restricted_email.toLowerCase() !== emailLimpo
-      ) {
-        setErro(
-          `Este convite foi gerado especificamente para o e-mail ${status.restricted_email}.`
-        );
-        return;
       }
 
       const redirectUrl =
@@ -199,7 +185,7 @@ function LoginContent() {
 
       // Se a sessão foi iniciada imediatamente (Confirm Email desativado no Supabase)
       if (signUpData.session) {
-        if (status.needs_invite && codigoConvite.trim()) {
+        if (codigoConvite.trim()) {
           const { error: acceptError } = await supabase.rpc(
             "accept_group_invite",
             {
@@ -281,31 +267,14 @@ function LoginContent() {
             </button>
           </div>
 
-          {/* Avisos de status do convite no modo Criar Conta */}
-          {modo === "criar" && !carregandoStatus && regStatus && (
-            <div>
-              {!regStatus.needs_invite ? (
-                <div className="bg-primary-light text-primary-hover px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>
-                    Primeiro acesso liberado! Após criar sua conta, você dará um
-                    nome ao grupo da casa.
-                  </span>
-                </div>
-              ) : regStatus.invite_valid ? (
-                <div className="bg-budget-green-bg text-budget-green-text px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>
-                    Convite válido para entrar no grupo &ldquo;
-                    {regStatus.group_name}&rdquo;!
-                  </span>
-                </div>
-              ) : (
-                <div className="bg-background border border-border text-text-muted px-3.5 py-2.5 rounded-xl text-xs font-medium">
-                  Cadastro exclusivo por convite. Digite abaixo o código gerado
-                  por quem criou o grupo.
-                </div>
-              )}
+          {/* Aviso se acessou via link de convite válido */}
+          {modo === "criar" && !carregandoStatus && codigoConvite && regStatus?.invite_valid && (
+            <div className="bg-budget-green-bg text-budget-green-text px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>
+                Você foi convidado(a) para entrar no grupo &ldquo;
+                {regStatus.group_name}&rdquo;!
+              </span>
             </div>
           )}
 
@@ -325,27 +294,6 @@ function LoginContent() {
           )}
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
-            {modo === "criar" && regStatus?.needs_invite && (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-text-muted">
-                  Código do convite
-                </label>
-                <div className="relative flex items-center">
-                  <Ticket className="w-4 h-4 text-text-muted absolute left-3.5" />
-                  <input
-                    type="text"
-                    value={codigoConvite}
-                    onChange={(e) =>
-                      setCodigoConvite(e.target.value.toUpperCase())
-                    }
-                    placeholder="Ex: PECH-4K9M"
-                    className="w-full h-12 pl-10 pr-4 rounded-xl bg-background border border-border text-sm font-bold tracking-wider uppercase text-text-main focus:outline-none focus:border-primary"
-                    required
-                  />
-                </div>
-              </div>
-            )}
-
             {modo === "criar" && (
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-bold text-text-muted">
