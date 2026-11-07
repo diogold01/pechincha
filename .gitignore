@@ -48,3 +48,15 @@ Thumbs.db
 # Tokens locais temporários
 *token*.txt
 .git-token
+
+# Arquivos de instruções/regras de IA e Prompts (NÃO ENVIAR AO GITHUB)
+GEMINI.md
+docs/PROMPT.md
+docs/referencias/prompt-antigravity-app-compras.md
+*.ai
+.cursor/
+.gemini/
+
+# Imagens e referências locais de desenvolvimento
+references/
+
