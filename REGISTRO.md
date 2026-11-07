@@ -172,6 +172,14 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Isolamento Estrito de Grupos ([supabase/schema.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/schema.sql) e [supabase/migrations/20261107_fix_guest_isolation.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/migrations/20261107_fix_guest_isolation.sql)):** Corrigida a função `ensure_user_group` para que o visitante acerte exclusivamente o grupo isolado "Demonstração (Visitante)" e nunca acesse o grupo privado da família ("Nossa Casa"). Novos cadastros ganham seu próprio grupo e só entram em outros mediante código de convite explícito.
 - **Remoção de Membros pelo Administrador ([src/app/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/page.tsx)):** Adicionado botão `X` ao lado dos membros no card da tela inicial, permitindo que o criador admin expulse membros indesejados diretamente pela interface.
 
+---
+
+## Conversão de Visitante em Conta Permanente (Progressive Onboarding)
+- **Banner Responsivo Superior ([src/components/GuestConversionBanner.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/GuestConversionBanner.tsx)):** Exibição de banner elegante no topo da aplicação quando o usuário estiver no modo visitante, com chamada para transformar o acesso de teste em uma conta definitiva.
+- **Modal de Cadastro Adaptativo:** Ao tocar em "Criar conta", abre uma gaveta inferior suave no celular (`bottom-sheet`) e diálogo centralizado no desktop, solicitando Nome, E-mail e Senha.
+- **Preservação de Dados e Renomeação Automática ([supabase/migrations/20261107_convert_guest_account.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/migrations/20261107_convert_guest_account.sql)):** Atualização imediata das credenciais via Supabase Auth e renomeação automática do grupo de teste para "Nossa Casa", tornando o usuário o administrador oficial de sua conta sem perder os produtos ou simulações feitas durante a visita.
+
+
 
 
 

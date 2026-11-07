@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
 import FrequentProductsBar from "@/components/FrequentProductsBar";
 import LiveMarketMode from "@/components/LiveMarketMode";
+import GuestConversionBanner from "@/components/GuestConversionBanner";
 import {
   lerSnapshotModoMercado,
   processarFilaOffline,
@@ -1340,6 +1341,7 @@ function CompraPlanejamentoContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-text-main pb-32 md:pb-8 md:pl-64 w-full max-w-full overflow-x-hidden">
+      <GuestConversionBanner onConverted={carregarDados} />
       <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-4 min-w-0 max-w-full">
         {/* Topo: Seletor de Carrinho e Botão Novo Carrinho */}
         <div className="flex items-center justify-between gap-2 w-full min-w-0">

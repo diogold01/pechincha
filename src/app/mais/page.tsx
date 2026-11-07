@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
+import GuestConversionBanner from "@/components/GuestConversionBanner";
 import type { Group, GroupSettings, Market, MetodoPreco, Sector } from "@/lib/types";
 
 const EMOJIS_SUGERIDOS = [
@@ -364,6 +365,7 @@ export default function MaisPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-text-main pb-28 md:pb-8 md:pl-64">
+      <GuestConversionBanner onConverted={carregarTudo} />
       <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-5">
         <div>
           <div className="text-[13px] text-text-muted font-medium">

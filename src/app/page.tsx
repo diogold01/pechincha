@@ -19,6 +19,7 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
 import GroupOnboarding from "@/components/GroupOnboarding";
 import BottomNav from "@/components/BottomNav";
+import GuestConversionBanner from "@/components/GuestConversionBanner";
 import { repetirCarrinhoNoBanco } from "@/lib/cart-actions";
 import {
   formatarDataCurtaBR,
@@ -530,6 +531,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-text-main pb-24 md:pb-8 md:pl-64">
+      <GuestConversionBanner onConverted={carregarDados} />
       <main className="flex-1 w-full max-w-md md:max-w-5xl lg:max-w-6xl mx-auto px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-5">
         {/* Topo conforme referência 1-inicio.html */}
         <div className="flex items-start justify-between">
