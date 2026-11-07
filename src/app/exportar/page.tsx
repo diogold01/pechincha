@@ -485,8 +485,8 @@ export default function ExportarBackupPage() {
   ).length;
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-text-main pb-28">
-      <main className="flex-1 w-full max-w-md mx-auto px-5 pt-5 flex flex-col gap-4">
+    <div className="min-h-screen flex flex-col bg-background text-text-main pb-28 md:pb-8 md:pl-64">
+      <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-4">
         {/* Cabeçalho */}
         <div className="flex items-center gap-3">
           <Link
