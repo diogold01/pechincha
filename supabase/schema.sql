@@ -425,7 +425,7 @@ BEGIN
 END;
 $$;
 
--- 3.4.1. Garante que qualquer novo usuário acesse o grupo diretamente sem telas de bloqueio
+-- 3.4.1. Garante isolamento estrito: Visitante ganha seu próprio grupo demo e novos usuários ganham grupo próprio
 CREATE OR REPLACE FUNCTION public.ensure_user_group(
   p_nome_exibicao text DEFAULT NULL
 )
@@ -437,13 +437,15 @@ AS $$
 DECLARE
   v_user_id uuid;
   v_group_id uuid;
+  v_user_email text;
+  v_demo_group_id uuid;
 BEGIN
   v_user_id := auth.uid();
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'Você precisa estar conectado para acessar o grupo.';
   END IF;
 
-  -- Se o usuário já pertence a um grupo, retorna seu ID
+  -- Se o usuário já pertence a um grupo dele, retorna seu ID
   SELECT group_id INTO v_group_id
   FROM public.group_members
   WHERE user_id = v_user_id
@@ -453,28 +455,63 @@ BEGIN
     RETURN v_group_id;
   END IF;
 
-  -- Se já existir um grupo configurado (ex: o grupo demo com os dados do app),
-  -- vincula o usuário automaticamente como membro para ele entrar direto!
-  SELECT id INTO v_group_id
-  FROM public.groups
-  ORDER BY criado_em ASC
-  LIMIT 1;
+  -- Se for o usuário Visitante (Recrutador/Demo): usa um grupo de demonstração EXCLUSIVO e isolado
+  v_user_email := lower(trim(COALESCE(auth.jwt() ->> 'email', '')));
+  IF v_user_email = 'visitante@pechincha.app' OR lower(COALESCE(p_nome_exibicao, '')) = 'visitante' THEN
+    SELECT id INTO v_demo_group_id
+    FROM public.groups
+    WHERE nome = 'Demonstração (Visitante)'
+    LIMIT 1;
 
-  IF v_group_id IS NOT NULL THEN
-    INSERT INTO public.group_members (group_id, user_id, papel, nome_exibicao)
-    VALUES (
-      v_group_id,
-      v_user_id,
-      'membro',
-      NULLIF(trim(COALESCE(p_nome_exibicao, '')), '')
-    )
-    ON CONFLICT (group_id, user_id) DO NOTHING;
+    IF v_demo_group_id IS NOT NULL THEN
+      INSERT INTO public.group_members (group_id, user_id, papel, nome_exibicao)
+      VALUES (v_demo_group_id, v_user_id, 'membro', 'Visitante')
+      ON CONFLICT (group_id, user_id) DO NOTHING;
+      RETURN v_demo_group_id;
+    END IF;
 
-    RETURN v_group_id;
+    RETURN public.create_group_with_defaults('Demonstração (Visitante)', 'America/Cuiaba', 'Visitante');
   END IF;
 
-  -- Se for a primeiríssima instalação do banco e não existir nenhum grupo, cria o grupo padrão
+  -- Para QUALQUER OUTRO USUÁRIO: CRIA O SEU PRÓPRIO GRUPO NOVO!
+  -- NUNCA adiciona em grupo existente de outros usuários!
   RETURN public.create_group_with_defaults('Nossa Casa', 'America/Cuiaba', p_nome_exibicao);
+END;
+$$;
+
+-- 3.4.2. Permite ao administrador do grupo expulsar membros indesejados
+CREATE OR REPLACE FUNCTION public.remove_group_member(
+  p_group_id uuid,
+  p_user_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_caller_id uuid;
+  v_caller_role text;
+BEGIN
+  v_caller_id := auth.uid();
+  IF v_caller_id IS NULL THEN
+    RAISE EXCEPTION 'Não autenticado.';
+  END IF;
+
+  SELECT papel INTO v_caller_role
+  FROM public.group_members
+  WHERE group_id = p_group_id AND user_id = v_caller_id;
+
+  IF v_caller_role <> 'admin' THEN
+    RAISE EXCEPTION 'Apenas o administrador do grupo pode remover membros.';
+  END IF;
+
+  IF p_user_id = v_caller_id THEN
+    RAISE EXCEPTION 'O criador do grupo não pode ser removido.';
+  END IF;
+
+  DELETE FROM public.group_members
+  WHERE group_id = p_group_id AND user_id = p_user_id;
 END;
 $$;
 
@@ -676,6 +713,19 @@ CREATE POLICY "group_members_update" ON public.group_members
   FOR UPDATE TO authenticated
   USING (user_id = auth.uid() AND public.is_group_member(group_id))
   WITH CHECK (user_id = auth.uid() AND public.is_group_member(group_id));
+
+DROP POLICY IF EXISTS "group_members_delete" ON public.group_members;
+CREATE POLICY "group_members_delete" ON public.group_members
+  FOR DELETE TO authenticated
+  USING (
+    user_id = auth.uid() OR
+    EXISTS (
+      SELECT 1 FROM public.group_members
+      WHERE group_id = public.group_members.group_id
+        AND user_id = auth.uid()
+        AND papel = 'admin'
+    )
+  );
 
 -- 5.3. Políticas para `group_invites`
 DROP POLICY IF EXISTS "group_invites_select" ON public.group_invites;

@@ -411,6 +411,34 @@ export default function HomePage() {
     }
   }
 
+  async function handleRemoverMembro(memberUserId: string, nomeMembro?: string | null) {
+    if (!grupo) return;
+    const confirmou = window.confirm(
+      `Deseja remover "${nomeMembro || "este membro"}" do grupo? Ele perderá o acesso a esta casa.`
+    );
+    if (!confirmou) return;
+
+    try {
+      const supabase = createClient();
+      const { error: rpcErr } = await supabase.rpc("remove_group_member", {
+        p_group_id: grupo.id,
+        p_user_id: memberUserId,
+      });
+
+      if (rpcErr) {
+        await supabase
+          .from("group_members")
+          .delete()
+          .eq("group_id", grupo.id)
+          .eq("user_id", memberUserId);
+      }
+
+      await carregarDados();
+    } catch {
+      alert("Não foi possível remover o membro.");
+    }
+  }
+
   async function copiarParaAreaDeTransferencia(texto: string, tipo: string) {
     try {
       await navigator.clipboard.writeText(texto);
@@ -756,18 +784,38 @@ export default function HomePage() {
 
               {/* Lista de membros atuais */}
               <div className="flex flex-wrap gap-2 pt-1">
-                {membros.map((m, idx) => (
-                  <div
-                    key={m.user_id}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background border border-border text-xs font-bold"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-primary" />
-                    <span>
-                      {m.nome_exibicao || `Membro ${idx + 1}`}{" "}
-                      {m.papel === "admin" ? "(Criador)" : ""}
-                    </span>
-                  </div>
-                ))}
+                {membros.map((m, idx) => {
+                  const souAdmin = membros.some(
+                    (me) => me.user_id === userId && me.papel === "admin"
+                  );
+                  const podeRemover = souAdmin && m.papel !== "admin";
+
+                  return (
+                    <div
+                      key={m.user_id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background border border-border text-xs font-bold"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-primary" />
+                      <span>
+                        {m.nome_exibicao || `Membro ${idx + 1}`}{" "}
+                        {m.papel === "admin" ? "(Criador)" : ""}
+                      </span>
+                      {podeRemover && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRemoverMembro(m.user_id, m.nome_exibicao)
+                          }
+                          aria-label={`Remover ${m.nome_exibicao || "membro"}`}
+                          className="ml-0.5 p-0.5 rounded-full text-text-muted hover:text-budget-red hover:bg-budget-red-bg transition-colors cursor-pointer"
+                          title="Remover membro do grupo"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {erroConvite && (
