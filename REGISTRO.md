@@ -152,6 +152,13 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Modo Mercado Amplo para Tablets e Computadores ([src/components/LiveMarketMode.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/LiveMarketMode.tsx)):** O Modo Mercado agora expande de forma equilibrada até `md:max-w-2xl lg:max-w-3xl`, centralizado na tela, com topo fixo, lista de itens e rodapé alinhados.
 - **Modais Centrais em Toda a Compra:** Modais de preço do item (3x4), troca de mercado, cadastro rápido, conflito de agrupar/separar e pagamento misto convertidos em caixas de diálogo centralizadas (`md:items-center md:rounded-2xl md:max-w-lg`) no computador.
 
+---
+
+## Cadastro Livre e Convites Pós-Criação
+- **Liberação do Cadastro Direto ([src/app/login/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/login/page.tsx)):** Removida a exigência obrigatória de código de convite e a mensagem de bloqueio na tela de criação de conta. Qualquer usuário pode criar sua conta livremente preenchendo apenas Nome, E-mail e Senha.
+- **Fluxo de Família e Convites Preservado:** Caso alguém acesse por um link de convite (`/convite/[codigo]`), o código é processado automaticamente e a pessoa entra no grupo convidado. Caso contrário, após criar a conta, o usuário cria o grupo da família ("Nossa Casa") e gera convites para parceiro(a) diretamente pelo botão "Convidar segunda pessoa para o grupo" dentro do app.
+
+
 
 
 
