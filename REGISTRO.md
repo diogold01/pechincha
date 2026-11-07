@@ -169,7 +169,9 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 
 ## Acesso como Visitante (Modo Demonstração com 1 Clique)
 - **Botão "Entrar como visitante" ([src/app/login/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/login/page.tsx)):** Adicionado botão de acesso rápido na tela de login permitindo que recrutadores e visitantes acessem o aplicativo instantaneamente sem precisar digitar e-mail e senha.
-- **Autenticação e Grupo Automáticos:** Ao clicar, o app autentica ou inicializa uma conta demo e vincula o visitante diretamente ao grupo de demonstração com histórico de compras, catálogo de produtos e orçamento ativos.
+- **Isolamento Estrito de Grupos ([supabase/schema.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/schema.sql) e [supabase/migrations/20261107_fix_guest_isolation.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/migrations/20261107_fix_guest_isolation.sql)):** Corrigida a função `ensure_user_group` para que o visitante acerte exclusivamente o grupo isolado "Demonstração (Visitante)" e nunca acesse o grupo privado da família ("Nossa Casa"). Novos cadastros ganham seu próprio grupo e só entram em outros mediante código de convite explícito.
+- **Remoção de Membros pelo Administrador ([src/app/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/page.tsx)):** Adicionado botão `X` ao lado dos membros no card da tela inicial, permitindo que o criador admin expulse membros indesejados diretamente pela interface.
+
 
 
 
