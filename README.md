@@ -23,6 +23,7 @@ Aplicativo web progressivo (PWA) para controle colaborativo de compras de mercad
 ## Funcionalidades Implementadas
 
 ### 1. Colaboração em Tempo Real e Multi-dispositivo
+- **Modo Visitante com 1 Clique:** Botão "Entrar como visitante" na tela de login permitindo acesso imediato aos avaliadores técnicos sem exigência de preenchimento prévio de formulário.
 - **Autenticação e Grupos:** Cadastro e login por e-mail e senha. Compartilhamento do mesmo ambiente de compras entre membros de uma família/casal via `group_id`.
 - **Sistema de Convites:** Emissão de convites com código único (`PECH-XXXX`) e links diretos (`/convite/[codigo]`) para inclusão de novos membros.
 - **Sincronização ao Vivo:** Atualização instantânea dos carrinhos e itens marcados entre múltiplos dispositivos conectados usando canais do Supabase Realtime.

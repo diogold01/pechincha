@@ -165,6 +165,13 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Renomear Grupo na Interface ([src/app/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/page.tsx)):** Adicionado botão de lápis no card do grupo na Home, permitindo que o usuário altere o nome do grupo a qualquer momento (ex.: "casal", "Nossa Casa") diretamente de dentro do app.
 - **Atualização das Funções do Banco ([supabase/schema.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/schema.sql) e [supabase/migrations/20261107_ensure_user_group.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/migrations/20261107_ensure_user_group.sql)):** Removida a trava de grupo único (`v_any_group_exists`) e criada a função `ensure_user_group` para permitir criação e acesso ilimitado de novos usuários sem mensagens vermelhas.
 
+---
+
+## Acesso como Visitante (Modo Demonstração com 1 Clique)
+- **Botão "Entrar como visitante" ([src/app/login/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/login/page.tsx)):** Adicionado botão de acesso rápido na tela de login permitindo que recrutadores e visitantes acessem o aplicativo instantaneamente sem precisar digitar e-mail e senha.
+- **Autenticação e Grupo Automáticos:** Ao clicar, o app autentica ou inicializa uma conta demo e vincula o visitante diretamente ao grupo de demonstração com histórico de compras, catálogo de produtos e orçamento ativos.
+
+
 
 
 
