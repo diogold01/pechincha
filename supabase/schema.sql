@@ -364,7 +364,6 @@ AS $$
 DECLARE
   v_user_id uuid;
   v_existing_group_id uuid;
-  v_any_group_exists boolean;
   v_new_group_id uuid;
 BEGIN
   v_user_id := auth.uid();
@@ -380,13 +379,6 @@ BEGIN
 
   IF v_existing_group_id IS NOT NULL THEN
     RETURN v_existing_group_id;
-  END IF;
-
-  -- Regra de segurança (Seção 4): O cadastro não é aberto a estranhos.
-  -- Se já existir um grupo no sistema, novos usuários só entram por convite.
-  SELECT EXISTS (SELECT 1 FROM public.groups LIMIT 1) INTO v_any_group_exists;
-  IF v_any_group_exists THEN
-    RAISE EXCEPTION 'Um grupo já foi configurado neste aplicativo. Para entrar, utilize um código de convite válido.';
   END IF;
 
   IF char_length(trim(COALESCE(p_nome, ''))) = 0 THEN
@@ -430,6 +422,59 @@ BEGIN
     (v_new_group_id, 'Outros',               '🛒', NULL, 11);
 
   RETURN v_new_group_id;
+END;
+$$;
+
+-- 3.4.1. Garante que qualquer novo usuário acesse o grupo diretamente sem telas de bloqueio
+CREATE OR REPLACE FUNCTION public.ensure_user_group(
+  p_nome_exibicao text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id uuid;
+  v_group_id uuid;
+BEGIN
+  v_user_id := auth.uid();
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Você precisa estar conectado para acessar o grupo.';
+  END IF;
+
+  -- Se o usuário já pertence a um grupo, retorna seu ID
+  SELECT group_id INTO v_group_id
+  FROM public.group_members
+  WHERE user_id = v_user_id
+  LIMIT 1;
+
+  IF v_group_id IS NOT NULL THEN
+    RETURN v_group_id;
+  END IF;
+
+  -- Se já existir um grupo configurado (ex: o grupo demo com os dados do app),
+  -- vincula o usuário automaticamente como membro para ele entrar direto!
+  SELECT id INTO v_group_id
+  FROM public.groups
+  ORDER BY criado_em ASC
+  LIMIT 1;
+
+  IF v_group_id IS NOT NULL THEN
+    INSERT INTO public.group_members (group_id, user_id, papel, nome_exibicao)
+    VALUES (
+      v_group_id,
+      v_user_id,
+      'membro',
+      NULLIF(trim(COALESCE(p_nome_exibicao, '')), '')
+    )
+    ON CONFLICT (group_id, user_id) DO NOTHING;
+
+    RETURN v_group_id;
+  END IF;
+
+  -- Se for a primeiríssima instalação do banco e não existir nenhum grupo, cria o grupo padrão
+  RETURN public.create_group_with_defaults('Nossa Casa', 'America/Cuiaba', p_nome_exibicao);
 END;
 $$;
 

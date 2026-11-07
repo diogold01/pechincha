@@ -12,6 +12,8 @@ import {
   Trash2,
   Plus,
   ArrowRight,
+  Pencil,
+  X,
 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
@@ -71,6 +73,11 @@ export default function HomePage() {
   const [copiadoTexto, setCopiadoTexto] = useState<string | null>(null);
   const [erroConvite, setErroConvite] = useState<string | null>(null);
 
+  // Edição rápida do nome do grupo na Home
+  const [modalEditarGrupo, setModalEditarGrupo] = useState(false);
+  const [nomeGrupoEditando, setNomeGrupoEditando] = useState("");
+  const [salvandoNomeGrupo, setSalvandoNomeGrupo] = useState(false);
+
   const carregarDados = useCallback(async () => {
     if (!configurado) {
       setCarregando(false);
@@ -89,13 +96,14 @@ export default function HomePage() {
         return;
       }
 
+      const nomeParaExibir =
+        (user.user_metadata?.nome as string) ||
+        user.email?.split("@")[0] ||
+        "Usuário";
+
       setUserId(user.id);
       setUserEmail(user.email || "");
-      setUserName(
-        (user.user_metadata?.nome as string) ||
-          user.email?.split("@")[0] ||
-          "Usuário"
-      );
+      setUserName(nomeParaExibir);
 
       // Busca o vínculo de grupo do usuário
       const { data: memberRows } = await supabase
@@ -104,13 +112,38 @@ export default function HomePage() {
         .eq("user_id", user.id)
         .limit(1);
 
-      if (!memberRows || memberRows.length === 0) {
+      let groupId = memberRows?.[0]?.group_id || null;
+
+      // Se o usuário ainda não pertence a nenhum grupo, vincula ou cria automaticamente
+      if (!groupId) {
+        const { data: ensureGroupId, error: ensureErr } = await supabase.rpc(
+          "ensure_user_group",
+          { p_nome_exibicao: nomeParaExibir }
+        );
+
+        if (!ensureErr && ensureGroupId) {
+          groupId = ensureGroupId as string;
+        } else {
+          // Fallback: se a nova RPC ainda não estiver criada no banco, tenta create_group_with_defaults
+          const { data: fallbackGroupId } = await supabase.rpc(
+            "create_group_with_defaults",
+            {
+              p_nome: "Nossa Casa",
+              p_fuso_horario: "America/Cuiaba",
+              p_nome_exibicao: nomeParaExibir,
+            }
+          );
+          if (fallbackGroupId) {
+            groupId = fallbackGroupId as string;
+          }
+        }
+      }
+
+      if (!groupId) {
         setGrupo(null);
         setCarregando(false);
         return;
       }
-
-      const groupId = memberRows[0].group_id;
 
       // Carrega dados do grupo, membros, convites pendentes, setores e compras em paralelo
       const [
@@ -355,6 +388,27 @@ export default function HomePage() {
     const supabase = createClient();
     await supabase.from("group_invites").delete().eq("id", id);
     await carregarDados();
+  }
+
+  async function handleSalvarNomeGrupo(e: React.FormEvent) {
+    e.preventDefault();
+    if (!grupo || !nomeGrupoEditando.trim()) return;
+    setSalvandoNomeGrupo(true);
+    try {
+      const supabase = createClient();
+      const novoNome = nomeGrupoEditando.trim();
+      const { error } = await supabase
+        .from("groups")
+        .update({ nome: novoNome })
+        .eq("id", grupo.id);
+
+      if (!error) {
+        setGrupo({ ...grupo, nome: novoNome });
+        setModalEditarGrupo(false);
+      }
+    } finally {
+      setSalvandoNomeGrupo(false);
+    }
   }
 
   async function copiarParaAreaDeTransferencia(texto: string, tipo: string) {
@@ -671,9 +725,22 @@ export default function HomePage() {
                     <Users className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-base font-extrabold leading-snug">
-                      {grupo.nome}
-                    </h2>
+                    <div className="flex items-center gap-1.5">
+                      <h2 className="text-base font-extrabold leading-snug">
+                        {grupo.nome}
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNomeGrupoEditando(grupo.nome);
+                          setModalEditarGrupo(true);
+                        }}
+                        aria-label="Renomear grupo"
+                        className="p-1 rounded-lg text-text-muted hover:text-primary hover:bg-primary-light transition-colors cursor-pointer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     <p className="text-xs text-text-muted">
                       {membros.length}{" "}
                       {membros.length === 1
@@ -797,6 +864,58 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+
+      {/* Modal de Renomear Grupo */}
+      {modalEditarGrupo && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-sm p-5 shadow-lg flex flex-col gap-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-text-main">
+                Renomear grupo
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalEditarGrupo(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-text-muted hover:text-text-main cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSalvarNomeGrupo} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-muted">
+                  Nome do grupo (casal / família)
+                </label>
+                <input
+                  type="text"
+                  value={nomeGrupoEditando}
+                  onChange={(e) => setNomeGrupoEditando(e.target.value)}
+                  placeholder="Ex: casal, Nossa Casa..."
+                  className="w-full h-11 px-3.5 rounded-xl bg-background border border-border text-sm text-text-main focus:outline-none focus:border-primary"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarGrupo(false)}
+                  className="h-11 rounded-xl bg-background border border-border text-sm font-bold text-text-muted hover:text-text-main cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoNomeGrupo || !nomeGrupoEditando.trim()}
+                  className="h-11 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary-hover disabled:opacity-50 cursor-pointer"
+                >
+                  {salvandoNomeGrupo ? "Salvando..." : "Salvar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>
