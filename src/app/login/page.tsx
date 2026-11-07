@@ -127,10 +127,15 @@ function LoginContent() {
           return;
         }
 
-        // Se entrou com um código de convite na URL, já vincula ao grupo
+        // Se entrou com um código de convite na URL, vincula ao grupo convidado
         if (codigoConvite.trim()) {
           await supabase.rpc("accept_group_invite", {
             p_codigo: codigoConvite.trim(),
+            p_nome_exibicao: nome.trim() || null,
+          });
+        } else {
+          // Garante o acesso direto sem travas de onboarding
+          await supabase.rpc("ensure_user_group", {
             p_nome_exibicao: nome.trim() || null,
           });
         }
@@ -198,6 +203,11 @@ function LoginContent() {
             setErro(acceptError.message);
             return;
           }
+        } else {
+          // Garante vínculo imediato para o recrutador/novo usuário entrar direto
+          await supabase.rpc("ensure_user_group", {
+            p_nome_exibicao: nome.trim() || emailLimpo.split("@")[0],
+          });
         }
 
         router.push("/");

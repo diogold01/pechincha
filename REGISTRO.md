@@ -158,6 +158,14 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Liberação do Cadastro Direto ([src/app/login/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/login/page.tsx)):** Removida a exigência obrigatória de código de convite e a mensagem de bloqueio na tela de criação de conta. Qualquer usuário pode criar sua conta livremente preenchendo apenas Nome, E-mail e Senha.
 - **Fluxo de Família e Convites Preservado:** Caso alguém acesse por um link de convite (`/convite/[codigo]`), o código é processado automaticamente e a pessoa entra no grupo convidado. Caso contrário, após criar a conta, o usuário cria o grupo da família ("Nossa Casa") e gera convites para parceiro(a) diretamente pelo botão "Convidar segunda pessoa para o grupo" dentro do app.
 
+---
+
+## Acesso Direto para Recrutadores e Edição do Nome do Grupo
+- **Entrada Direta sem Tela de Bloqueio ([src/app/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/page.tsx) e [src/app/login/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/login/page.tsx)):** Eliminada a obrigatoriedade da tela de "Configurar seu Grupo" (`GroupOnboarding`). Ao logar ou criar conta, o app vincula o novo usuário automaticamente ao grupo existente em segundo plano, caindo direto na tela inicial com todos os recursos, produtos e compras ativos.
+- **Renomear Grupo na Interface ([src/app/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/page.tsx)):** Adicionado botão de lápis no card do grupo na Home, permitindo que o usuário altere o nome do grupo a qualquer momento (ex.: "casal", "Nossa Casa") diretamente de dentro do app.
+- **Atualização das Funções do Banco ([supabase/schema.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/schema.sql) e [supabase/migrations/20261107_ensure_user_group.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/migrations/20261107_ensure_user_group.sql)):** Removida a trava de grupo único (`v_any_group_exists`) e criada a função `ensure_user_group` para permitir criação e acesso ilimitado de novos usuários sem mensagens vermelhas.
+
+
 
 
 
