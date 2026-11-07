@@ -553,11 +553,11 @@ export default function ProdutosPage() {
 
         {/* Lista de Produtos */}
         {carregando ? (
-          <div className="flex flex-col gap-2.5">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className="h-16 bg-border/70 rounded-2xl animate-pulse"
+                className="h-20 bg-border/70 rounded-2xl animate-pulse"
               />
             ))}
           </div>
@@ -589,7 +589,7 @@ export default function ProdutosPage() {
             </button>
           </div>
         ) : (
-          <div className="flex flex-col gap-2.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {produtosFiltrados.map((prod) => {
               const setor = prod.sector_id
                 ? mapaSetores.get(prod.sector_id)
@@ -660,8 +660,8 @@ export default function ProdutosPage() {
 
       {/* PAINEL DETALHE DO PRODUTO E HISTÓRICO DE PREÇOS */}
       {produtoDetalhe && estatisticasDetalhe && (
-        <div className="fixed inset-0 z-40 bg-black/40 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[90vh] bg-background rounded-t-[24px] flex flex-col overflow-hidden shadow-xl">
+        <div className="fixed inset-0 z-40 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-2xl max-h-[92vh] bg-background rounded-t-[24px] md:rounded-2xl flex flex-col overflow-hidden shadow-2xl">
             {/* Cabeçalho fixo do detalhe */}
             <div className="bg-card border-b border-border px-5 py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3 min-w-0">
@@ -1031,8 +1031,8 @@ export default function ProdutosPage() {
 
       {/* BOTTOM SHEET: CRIAR / EDITAR PRODUTO */}
       {sheetProdutoAberto && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[92vh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[92vh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-extrabold">
                 {produtoEditando ? "Editar produto" : "Novo produto"}
@@ -1225,8 +1225,8 @@ export default function ProdutosPage() {
 
       {/* BOTTOM SHEET: REGISTRAR NOVO PREÇO (Seguindo 3-preco-do-item.html) */}
       {sheetPrecoAberto && produtoDetalhe && (
-        <div className="fixed inset-0 z-50 bg-black/45 flex items-end justify-center">
-          <div className="w-full max-w-md max-h-[92vh] overflow-y-auto bg-card rounded-t-[24px] p-5 flex flex-col gap-3.5">
+        <div className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg max-h-[92vh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-3.5 shadow-2xl">
             <div className="w-10 h-1.5 rounded-full bg-border mx-auto" />
 
             <div className="flex items-start justify-between">

@@ -130,5 +130,12 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Grid de 2 Colunas no Computador ([src/app/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/page.tsx)):** Estruturada a tela inicial com grade responsiva (`grid-cols-1 lg:grid-cols-12`). Na coluna da esquerda (`lg:col-span-7`), ficam o Card do Mês (gasto × orçamento e alertas), o Card de Continuar Compra e o botão de Nova Compra. Na coluna da direita (`lg:col-span-5`), ficam os Últimos Carrinhos (com repetição rápida) e o Card de Gestão do Grupo e Convites.
 - **Preservação Mobile:** No celular (`< lg`), os blocos mantêm o fluxo vertical idêntico à referência original `1-inicio.html`.
 
+---
+
+## Design Responsivo — Etapa 3: Tela de Produtos e Histórico em Grid Responsivo
+- **Grid de Produtos Adaptativo ([src/app/produtos/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/produtos/page.tsx)):** A lista de produtos agora se expande em grade de 2 a 3 colunas no computador e tablet (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3`), preenchendo a tela com cartões confortáveis e bem distribuídos.
+- **Modais Centralizados no Desktop ([src/app/produtos/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/produtos/page.tsx)):** As gavetas de detalhes do produto, histórico de preços, cadastro rápido e edição agora abrem como caixas de diálogo centralizadas (`md:items-center md:rounded-2xl md:max-w-2xl`) no computador em vez de ficarem presas ao rodapé da tela.
+
+
 
 
