@@ -459,8 +459,8 @@ export default function OrcamentoPage() {
           </div>
         </div>
 
-        {/* Lista de Setores com barras coloridas (4-orcamento.html) */}
-        <div className="flex flex-col gap-[6px]">
+        {/* Lista de Setores com barras coloridas em grid responsivo (4-orcamento.html) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {setores.map((setor) => {
             const gasto = gastoPorSetor.get(setor.id) || 0;
             const orcamento =
@@ -525,14 +525,14 @@ export default function OrcamentoPage() {
         </div>
       </main>
 
-      {/* Bottom Sheet para Criar ou Editar Setor */}
+      {/* Modal / Bottom Sheet para Criar ou Editar Setor */}
       {modalAberto && (
         <div
-          className="fixed inset-0 z-50 bg-black/45 flex items-end justify-center"
+          className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4"
           onClick={() => setModalAberto(false)}
         >
           <div
-            className="w-full max-w-md bg-card rounded-t-[26px] p-5 pb-7 shadow-xl animate-in slide-in-from-bottom duration-200 max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-md md:max-w-lg bg-card rounded-t-[26px] md:rounded-2xl p-5 pb-7 shadow-2xl animate-in fade-in duration-200 max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-10 h-1 rounded-full bg-border mx-auto mb-3" />

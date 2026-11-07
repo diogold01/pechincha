@@ -521,14 +521,16 @@ export default function ExportarBackupPage() {
         )}
 
         {carregando ? (
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="h-44 w-full bg-border/70 rounded-card animate-pulse" />
             <div className="h-44 w-full bg-border/70 rounded-card animate-pulse" />
           </div>
         ) : (
-          <>
-            {/* 1. EXPORTAÇÃO PARA APP DE FINANÇAS (CSV) */}
-            <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+            {/* COLUNA ESQUERDA: Exportação e Backups */}
+            <div className="flex flex-col gap-5">
+              {/* 1. EXPORTAÇÃO PARA APP DE FINANÇAS (CSV) */}
+              <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
                   <FileSpreadsheet className="w-5 h-5" />
@@ -661,7 +663,10 @@ export default function ExportarBackupPage() {
                 </button>
               </div>
             </section>
+          </div>
 
+          {/* COLUNA DIREITA: Guia de Instalação PWA */}
+          <div className="flex flex-col gap-5">
             {/* 3. GUIA DE INSTALAÇÃO DO APP NO CELULAR (ANDROID E IPHONE — SEÇÃO 3) */}
             <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
               <div className="flex items-center gap-2.5">
@@ -736,7 +741,8 @@ export default function ExportarBackupPage() {
                 </div>
               </div>
             </section>
-          </>
+          </div>
+        </div>
         )}
       </main>
 
