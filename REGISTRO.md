@@ -145,6 +145,14 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Exportação e Backup em 2 Colunas ([src/app/exportar/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/exportar/page.tsx)):** Opções de exportação CSV e backup completo à esquerda; Guia de Instalação PWA à direita.
 - **Modais Centralizados no Desktop:** Todos os modais de cadastro de setor, mercado e estimativa convertidos em caixas de diálogo flutuantes no desktop.
 
+---
+
+## Design Responsivo — Etapa 5: Planejamento de Compra e Modo Mercado Adaptativo
+- **Planejamento de Compras em 2 Colunas ([src/app/compra/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/compra/page.tsx)):** Em telas grandes (`lg:`), a lista de itens, carrossel de frequentes e busca instantânea ficam na coluna esquerda (7 colunas), enquanto o card de estimativa geral, seletor de mercado, alertas de orçamento e botão de iniciar compra ficam fixos e visíveis na coluna direita (5 colunas sticky). No celular, a ordem vertical natural continua idêntica e perfeita.
+- **Modo Mercado Amplo para Tablets e Computadores ([src/components/LiveMarketMode.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/LiveMarketMode.tsx)):** O Modo Mercado agora expande de forma equilibrada até `md:max-w-2xl lg:max-w-3xl`, centralizado na tela, com topo fixo, lista de itens e rodapé alinhados.
+- **Modais Centrais em Toda a Compra:** Modais de preço do item (3x4), troca de mercado, cadastro rápido, conflito de agrupar/separar e pagamento misto convertidos em caixas de diálogo centralizadas (`md:items-center md:rounded-2xl md:max-w-lg`) no computador.
+
+
 
 
 
