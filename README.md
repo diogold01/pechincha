@@ -8,17 +8,15 @@ Aplicativo web progressivo (PWA) para controle colaborativo de compras de mercad
 
 ## Telas da Aplicação
 
-<!-- Espaço reservado para capturas de tela do celular -->
 <p align="center">
-  <img src="docs/screenshots/modo-mercado.png" alt="Modo Mercado ao Vivo" width="30%" />
-  <img src="docs/screenshots/planejamento-compra.png" alt="Planejamento de Compra" width="30%" />
-  <img src="docs/screenshots/dashboard-orcamento.png" alt="Dashboard e Orçamento" width="30%" />
+  <img src="docs/screenshots/dashboard.png" alt="Início e Dashboard" width="48%" />
+  <img src="docs/screenshots/planejamento.png" alt="Planejamento de Compra com Alertas" width="48%" />
 </p>
 
-> *Sugestão de capturas para adicionar na pasta `docs/screenshots/`:*
-> 1. `modo-mercado.png`: Tela do Modo Mercado ao vivo com teclado numérico 3x4 aberto registrando o preço na prateleira.
-> 2. `planejamento-compra.png`: Tela de planejamento de compra com o carrossel de itens frequentes e estimativa de total.
-> 3. `dashboard-orcamento.png`: Tela inicial ou de orçamento exibindo as barras de progresso por setor (verde, amarelo e vermelho).
+<p align="center">
+  <img src="docs/screenshots/produtos.png" alt="Catálogo e Histórico de Preços" width="48%" />
+  <img src="docs/screenshots/orcamento.png" alt="Orçamento Mensal por Setor" width="48%" />
+</p>
 
 ---
 
