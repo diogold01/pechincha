@@ -380,14 +380,18 @@ export default function MaisPage() {
         )}
 
         {carregando ? (
-          <div className="flex flex-col gap-4">
-            <div className="h-40 bg-border/70 rounded-card animate-pulse" />
-            <div className="h-56 bg-border/70 rounded-card animate-pulse" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="h-44 bg-border/70 rounded-card animate-pulse" />
+            <div className="h-44 bg-border/70 rounded-card animate-pulse" />
+            <div className="h-44 bg-border/70 rounded-card animate-pulse" />
+            <div className="h-44 bg-border/70 rounded-card animate-pulse" />
           </div>
         ) : (
-          <>
-            {/* 1. MERCADOS */}
-            <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+            {/* COLUNA ESQUERDA: Mercados e Setores */}
+            <div className="flex flex-col gap-5">
+              {/* 1. MERCADOS */}
+              <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center">
@@ -510,7 +514,10 @@ export default function MaisPage() {
                 ))}
               </div>
             </section>
+          </div>
 
+          {/* COLUNA DIREITA: Configurações, Histórico e Exportação */}
+          <div className="flex flex-col gap-5">
             {/* 3. CONFIGURAÇÕES DE PREÇO E FUSO */}
             <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3 shadow-sm">
               <div className="flex items-center justify-between">
@@ -590,14 +597,15 @@ export default function MaisPage() {
                 </span>
               </button>
             </section>
-          </>
+          </div>
+        </div>
         )}
       </main>
 
-      {/* BOTTOM SHEET: MERCADO */}
+      {/* MODAL / BOTTOM SHEET: MERCADO */}
       {sheetMercadoAberto && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-end justify-center">
-          <div className="w-full max-w-md bg-card rounded-t-[24px] p-5 flex flex-col gap-4 animate-in slide-in-from-bottom duration-200">
+        <div className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-extrabold">
                 {mercadoEditando ? "Editar mercado" : "Novo mercado"}
@@ -671,10 +679,10 @@ export default function MaisPage() {
         </div>
       )}
 
-      {/* BOTTOM SHEET: SETOR */}
+      {/* MODAL / BOTTOM SHEET: SETOR */}
       {sheetSetorAberto && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-end justify-center">
-          <div className="w-full max-w-md bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-extrabold">
                 {setorEditando ? "Editar setor" : "Novo setor"}
@@ -766,10 +774,10 @@ export default function MaisPage() {
         </div>
       )}
 
-      {/* BOTTOM SHEET: CONFIGURAÇÕES */}
+      {/* MODAL / BOTTOM SHEET: CONFIGURAÇÕES */}
       {sheetConfigAberto && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-end justify-center">
-          <div className="w-full max-w-md bg-card rounded-t-[24px] p-5 flex flex-col gap-4">
+        <div className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-extrabold">
                 Configurações de Estimativa

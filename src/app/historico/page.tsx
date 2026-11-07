@@ -269,7 +269,7 @@ export default function HistoricoCarrinhosPage() {
             </Link>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {carrinhos.map((cart) => {
               const itensDoCart = itensPorCarrinho.get(cart.id) || [];
               const pagsDoCart = pagamentosPorCarrinho.get(cart.id) || [];

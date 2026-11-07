@@ -136,6 +136,16 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Grid de Produtos Adaptativo ([src/app/produtos/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/produtos/page.tsx)):** A lista de produtos agora se expande em grade de 2 a 3 colunas no computador e tablet (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3`), preenchendo a tela com cartões confortáveis e bem distribuídos.
 - **Modais Centralizados no Desktop ([src/app/produtos/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/produtos/page.tsx)):** As gavetas de detalhes do produto, histórico de preços, cadastro rápido e edição agora abrem como caixas de diálogo centralizadas (`md:items-center md:rounded-2xl md:max-w-2xl`) no computador em vez de ficarem presas ao rodapé da tela.
 
+---
+
+## Design Responsivo — Etapa 4: Orçamento, Histórico, Mais e Exportação
+- **Orçamento em Grade de 2 Colunas ([src/app/orcamento/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/orcamento/page.tsx)):** Os cartões de setores e barras de progresso do teto de gastos foram organizados em grade responsiva de 2 colunas (`grid-cols-1 md:grid-cols-2`), permitindo visualizar todos os setores sem rolagem excessiva.
+- **Histórico de Compras Expandido ([src/app/historico/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/historico/page.tsx)):** As compras finalizadas agora são dispostas em grade de 2 colunas no desktop, com detalhes e totais fáceis de inspecionar e repetir.
+- **Tela "Mais" em 2 Colunas ([src/app/mais/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/page.tsx)):** Mercados e Setores distribuídos na coluna esquerda; Configurações e Atalhos na coluna direita.
+- **Exportação e Backup em 2 Colunas ([src/app/exportar/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/exportar/page.tsx)):** Opções de exportação CSV e backup completo à esquerda; Guia de Instalação PWA à direita.
+- **Modais Centralizados no Desktop:** Todos os modais de cadastro de setor, mercado e estimativa convertidos em caixas de diálogo flutuantes no desktop.
+
+
 
 
 
