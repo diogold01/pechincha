@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseCupomHtml, parseCupomTexto } from "@/lib/cupom-parser";
-import { PDFParse } from "pdf-parse";
+import { extractText, getDocumentProxy } from "unpdf";
 
 export const dynamic = "force-dynamic";
 
@@ -21,25 +21,70 @@ export async function POST(req: NextRequest) {
       }
 
       const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-
-      const parser = new PDFParse({ data: buffer });
       let texto = "";
-      try {
-        const pdfData = await parser.getText();
-        texto = pdfData.text || "";
-      } finally {
-        await parser.destroy().catch(() => {});
-      }
 
-      if (!texto.trim()) {
+      try {
+        const pdf = await getDocumentProxy(new Uint8Array(bytes));
+        const extracted = await extractText(pdf, { mergePages: true });
+        texto = extracted.text || "";
+      } catch (pdfErr: any) {
+        console.error("Erro unpdf:", pdfErr);
         return NextResponse.json(
-          { erro: "Não foi possível extrair texto legível deste PDF." },
+          {
+            erro: "Não foi possível extrair o conteúdo deste PDF. Se for uma foto do cupom salva em PDF, tente ler o QR code pela câmera ou enviar uma foto nítida.",
+            detalhe: pdfErr.message,
+          },
           { status: 422 }
         );
       }
 
-      const dados = parseCupomTexto(texto);
+      if (!texto.trim()) {
+        return NextResponse.json(
+          {
+            erro: "O arquivo PDF enviado não contém texto legível (pode ser uma imagem escaneada). Tente apontar a câmera para o QR Code do cupom.",
+          },
+          { status: 422 }
+        );
+      }
+
+      // Se o texto do PDF contiver a URL da SEFAZ gravada (comum em consultas impressas)
+      let dados = parseCupomTexto(texto);
+
+      if (dados.itens.length === 0) {
+        const linkMatch = texto.match(/https?:\/\/[^\s"'<>]+(?:qrcode|nfce|danfe|consulta|sefaz)[^\s"'<>]*/i);
+        if (linkMatch) {
+          try {
+            const sefazRes = await fetch(linkMatch[0], {
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+                Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              },
+              redirect: "follow",
+              cache: "no-store",
+            });
+            if (sefazRes.ok) {
+              const html = await sefazRes.text();
+              const dadosHtml = parseCupomHtml(html);
+              if (dadosHtml.itens.length > 0) {
+                dados = dadosHtml;
+              }
+            }
+          } catch {
+            // Mantém os dados originais se a chamada falhar
+          }
+        }
+      }
+
+      if (dados.itens.length === 0) {
+        return NextResponse.json(
+          {
+            erro: "Não conseguimos identificar os produtos neste PDF. Certifique-se de que é um comprovante ou Danfe NFC-e com a lista de itens.",
+          },
+          { status: 422 }
+        );
+      }
+
       return NextResponse.json({ dados });
     }
 
@@ -73,6 +118,15 @@ export async function POST(req: NextRequest) {
         const html = await response.text();
         const dados = parseCupomHtml(html);
 
+        if (dados.itens.length === 0) {
+          return NextResponse.json(
+            {
+              erro: "O portal da SEFAZ abriu, mas não continha a lista legível de produtos. O cupom pode exigir digitação de captcha no site oficial.",
+            },
+            { status: 422 }
+          );
+        }
+
         return NextResponse.json({ dados });
       } catch (fetchErr: any) {
         return NextResponse.json(
@@ -88,6 +142,14 @@ export async function POST(req: NextRequest) {
 
     if (texto && typeof texto === "string" && texto.trim().length > 0) {
       const dados = parseCupomTexto(texto);
+      if (dados.itens.length === 0) {
+        return NextResponse.json(
+          {
+            erro: "Nenhum produto identificado no texto colado. Verifique a formatação do cupom.",
+          },
+          { status: 422 }
+        );
+      }
       return NextResponse.json({ dados });
     }
 

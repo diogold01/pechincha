@@ -143,6 +143,27 @@ export default function ImportarCupomPage() {
     setErro(null);
   }
 
+  // Interpreta respostas da API de forma segura contra erros de formato ou falhas 500
+  async function interpretarRespostaApi(res: Response) {
+    const rawText = await res.text();
+    let json: any = null;
+    try {
+      json = JSON.parse(rawText);
+    } catch {
+      throw new Error(
+        res.status >= 500
+          ? "O servidor não conseguiu extrair os dados deste cupom no momento. Tente tirar uma foto nítida do QR Code pela câmera ou colar o link oficial."
+          : "Não foi possível interpretar o arquivo do cupom fiscal."
+      );
+    }
+
+    if (!res.ok || json.erro) {
+      throw new Error(json?.erro || "Falha ao processar o cupom fiscal.");
+    }
+
+    return json;
+  }
+
   // 1. Processamento via QR Code lido pela Câmera
   async function handleScanQrCode(textoDecodificado: string) {
     if (processando) return;
@@ -156,11 +177,7 @@ export default function ImportarCupomPage() {
         body: JSON.stringify({ url: textoDecodificado }),
       });
 
-      const json = await res.json();
-      if (!res.ok || json.erro) {
-        throw new Error(json.erro || "Falha ao consultar a SEFAZ.");
-      }
-
+      const json = await interpretarRespostaApi(res);
       aplicarDadosCupom(json.dados);
     } catch (err: any) {
       setErro(err.message || "Não foi possível consultar este cupom na SEFAZ.");
@@ -189,11 +206,7 @@ export default function ImportarCupomPage() {
         body: formData,
       });
 
-      const json = await res.json();
-      if (!res.ok || json.erro) {
-        throw new Error(json.erro || "Falha ao processar o arquivo PDF.");
-      }
-
+      const json = await interpretarRespostaApi(res);
       aplicarDadosCupom(json.dados);
     } catch (err: any) {
       setErro(err.message || "Erro ao ler o arquivo PDF.");
@@ -223,11 +236,7 @@ export default function ImportarCupomPage() {
         }),
       });
 
-      const json = await res.json();
-      if (!res.ok || json.erro) {
-        throw new Error(json.erro || "Falha ao consultar o cupom.");
-      }
-
+      const json = await interpretarRespostaApi(res);
       aplicarDadosCupom(json.dados);
     } catch (err: any) {
       setErro(err.message || "Erro ao processar dados.");
