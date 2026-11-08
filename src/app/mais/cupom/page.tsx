@@ -385,52 +385,86 @@ export default function ImportarCupomPage() {
       const cartId = novoCart.id;
 
       // Cadastra novos produtos e itens do carrinho
-      for (const itemRev of itensValidos) {
+      for (let i = 0; i < itensValidos.length; i++) {
+        const itemRev = itensValidos[i];
         let produtoId = itemRev.produtoSugerido?.id;
 
-        // Se for novo produto, cadastra no banco
+        // Se for novo produto (ou usuário optou por cadastrar como novo), busca ou insere
         if (!itemRev.ehMesmoProduto || !produtoId) {
-          const setorId = itemRev.setorSugeridoId || setores[0]?.id;
-          const { data: prodCriado, error: errProd } = await supabase
-            .from("products")
-            .insert({
-              group_id: groupId,
-              sector_id: setorId,
-              nome: itemRev.nomeFormatadoNovo.trim(),
-              unidade: itemRev.itemCupom.unidade || "un",
-              marca_preferida: itemRev.marcaConfirmada.trim() || null,
-            })
-            .select("id")
-            .single();
+          const setorId = itemRev.setorSugeridoId || setores[0]?.id || null;
+          const nomeFinal = (itemRev.nomeFormatadoNovo || itemRev.itemCupom.descricao).trim();
 
-          if (!errProd && prodCriado) {
-            produtoId = prodCriado.id;
+          // 1. Verifica se já existe um produto com este nome no grupo para evitar duplicações
+          const { data: prodExistente } = await supabase
+            .from("products")
+            .select("id")
+            .eq("group_id", groupId)
+            .ilike("nome", nomeFinal)
+            .limit(1)
+            .maybeSingle();
+
+          if (prodExistente) {
+            produtoId = prodExistente.id;
+          } else {
+            // 2. Insere novo produto (usando estritamente as colunas válidas da tabela products)
+            const { data: prodCriado, error: errProd } = await supabase
+              .from("products")
+              .insert({
+                group_id: groupId,
+                sector_id: setorId,
+                nome: nomeFinal,
+                unidade: itemRev.itemCupom.unidade || "un",
+              })
+              .select("id")
+              .single();
+
+            if (errProd) {
+              console.error("Erro ao cadastrar produto:", errProd);
+              throw new Error(`Erro ao cadastrar produto "${nomeFinal}": ${errProd.message}`);
+            }
+
+            if (prodCriado) {
+              produtoId = prodCriado.id;
+            }
           }
         }
 
         if (produtoId) {
-          // Insere no carrinho
-          await supabase.from("cart_items").insert({
-            cart_id: cartId,
-            product_id: produtoId,
-            quantidade: itemRev.itemCupom.quantidade || 1,
-            unidade: itemRev.itemCupom.unidade || "un",
-            preco_unitario: itemRev.itemCupom.valor_unitario,
-            marca: itemRev.marcaConfirmada.trim() || null,
-            marcado: true, // Já vem conferido da nota
-          });
+          const precoUnitario =
+            itemRev.itemCupom.valor_unitario > 0 ? itemRev.itemCupom.valor_unitario : null;
 
-          // Grava histórico de preço atrelado ao mercado
-          if (mId && itemRev.itemCupom.valor_unitario > 0) {
+          // 3. Insere no carrinho (cart_items: cart_id, group_id, product_id, quantidade, preco_estimado, preco_real, marca, marcado, ordem)
+          const { data: cartItemCriado, error: errCartItem } = await supabase
+            .from("cart_items")
+            .insert({
+              cart_id: cartId,
+              group_id: groupId,
+              product_id: produtoId,
+              quantidade: itemRev.itemCupom.quantidade || 1,
+              preco_estimado: precoUnitario,
+              preco_real: precoUnitario,
+              marca: itemRev.marcaConfirmada.trim() || null,
+              marcado: true, // Já vem conferido da nota
+              ordem: i,
+            })
+            .select("id")
+            .single();
+
+          if (errCartItem) {
+            console.error("Erro ao inserir item no carrinho:", errCartItem);
+            throw new Error(`Erro ao adicionar "${itemRev.itemCupom.descricao}" ao carrinho: ${errCartItem.message}`);
+          }
+
+          // 4. Grava histórico de preço na tabela prices (prices: group_id, product_id, market_id, valor, marca, tipo, cart_item_id)
+          if (mId && precoUnitario && precoUnitario > 0) {
             await supabase.from("prices").insert({
               group_id: groupId,
               product_id: produtoId,
               market_id: mId,
-              preco: itemRev.itemCupom.valor_unitario,
+              valor: precoUnitario,
               marca: itemRev.marcaConfirmada.trim() || null,
-              unidade: itemRev.itemCupom.unidade || "un",
               tipo: itemRev.ehAtacado ? "atacado" : "varejo",
-              origem: "manual",
+              cart_item_id: cartItemCriado?.id || null,
             });
           }
         }
@@ -832,8 +866,8 @@ export default function ImportarCupomPage() {
                     {!descartado && (
                       <div className="pt-2 border-t border-border flex flex-col gap-3">
                         {/* Seletor: É o mesmo produto ou Cadastrar Novo? */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {rev.produtoSugerido && (
+                        {rev.produtoSugerido ? (
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
                               type="button"
                               onClick={() => alternarTipoProduto(index, true)}
@@ -849,21 +883,28 @@ export default function ImportarCupomPage() {
                                 {rev.scoreSimilaridade}% match
                               </span>
                             </button>
-                          )}
 
-                          <button
-                            type="button"
-                            onClick={() => alternarTipoProduto(index, false)}
-                            className={`h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                              !rev.ehMesmoProduto
-                                ? "bg-primary text-white shadow-2xs"
-                                : "bg-background border border-border text-text-muted hover:text-text-main"
-                            }`}
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>Cadastrar como novo produto</span>
-                          </button>
-                        </div>
+                            <button
+                              type="button"
+                              onClick={() => alternarTipoProduto(index, false)}
+                              className={`h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                !rev.ehMesmoProduto
+                                  ? "bg-primary text-white shadow-2xs"
+                                  : "bg-background border border-border text-text-muted hover:text-text-main"
+                              }`}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Cadastrar como produto separado</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-light text-primary text-xs font-bold border border-primary/20">
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>Novo produto (será cadastrado automaticamente no catálogo)</span>
+                            </span>
+                          </div>
+                        )}
 
                         {/* Campos de Ajuste do Item */}
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 bg-background/60 p-3 rounded-2xl border border-border">
