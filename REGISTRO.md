@@ -179,6 +179,12 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Modal de Cadastro Adaptativo:** Ao tocar em "Criar conta", abre uma gaveta inferior suave no celular (`bottom-sheet`) e diálogo centralizado no desktop, solicitando Nome, E-mail e Senha.
 - **Preservação de Dados e Renomeação Automática ([supabase/migrations/20261107_convert_guest_account.sql](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/supabase/migrations/20261107_convert_guest_account.sql)):** Atualização imediata das credenciais via Supabase Auth e renomeação automática do grupo de teste para "Nossa Casa", tornando o usuário o administrador oficial de sua conta sem perder os produtos ou simulações feitas durante a visita.
 
+---
+
+## Remoção de Senhas Hardcoded e Autenticação Anônima
+- **Correção de Alerta de Segurança (GitGuardian) ([src/app/login/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/login/page.tsx)):** Eliminadas as constantes de credenciais temporárias que acionaram o scanner de segurança do GitGuardian. O login de visitante agora utiliza a autenticação anônima nativa do Supabase (`signInAnonymously`) e variáveis de ambiente, sem nenhuma senha escrita no código-fonte.
+
+
 
 
 
