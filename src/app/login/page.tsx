@@ -234,38 +234,56 @@ function LoginContent() {
     const supabase = createClient();
 
     try {
-      const demoEmail = "visitante@pechincha.app";
-      const demoPass = "Visitante@2026";
-
-      // 1. Tenta autenticar na conta visitante padrão
-      const { error: signInErr } = await supabase.auth.signInWithPassword({
-        email: demoEmail,
-        password: demoPass,
+      // 1. Tenta autenticação anônima nativa do Supabase (sem e-mail ou senha hardcoded)
+      let sessionOk = false;
+      const { error: anonErr } = await supabase.auth.signInAnonymously({
+        options: {
+          data: {
+            nome: "Visitante",
+          },
+        },
       });
 
-      // 2. Se ainda não existir no Supabase, cria automaticamente
-      if (signInErr) {
-        const { error: signUpErr } = await supabase.auth.signUp({
-          email: demoEmail,
-          password: demoPass,
-          options: {
-            data: {
-              nome: "Visitante",
-            },
-          },
+      if (!anonErr) {
+        sessionOk = true;
+      } else {
+        // 2. Fallback caso Anonymous Sign-In não esteja ativo no painel do Supabase:
+        // Usa credenciais configuradas via variáveis de ambiente públicas opcionais
+        const fallbackEmail =
+          process.env.NEXT_PUBLIC_DEMO_EMAIL || "guest@pechincha.local";
+        const fallbackPass =
+          process.env.NEXT_PUBLIC_DEMO_PASSWORD || "DemoGuestPechincha2026!";
+
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: fallbackEmail,
+          password: fallbackPass,
         });
 
-        // Se o Supabase tiver anonymous auth ativado como fallback
-        if (signUpErr) {
-          const { error: anonErr } = await supabase.auth.signInAnonymously();
-          if (anonErr) {
-            setErro("Não foi possível acessar como visitante no momento. Tente entrar com seu e-mail.");
-            return;
+        if (!signInErr) {
+          sessionOk = true;
+        } else {
+          const { error: signUpErr } = await supabase.auth.signUp({
+            email: fallbackEmail,
+            password: fallbackPass,
+            options: {
+              data: {
+                nome: "Visitante",
+              },
+            },
+          });
+
+          if (!signUpErr) {
+            sessionOk = true;
           }
         }
       }
 
-      // 3. Garante que o visitante já caia com o grupo configurado
+      if (!sessionOk) {
+        setErro("Não foi possível acessar como visitante no momento.");
+        return;
+      }
+
+      // 3. Garante que o visitante já caia com o grupo isolado configurado
       await supabase.rpc("ensure_user_group", {
         p_nome_exibicao: "Visitante",
       });

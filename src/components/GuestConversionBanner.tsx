@@ -30,8 +30,10 @@ export default function GuestConversionBanner({ onConverted }: GuestConversionBa
         const { data: { user } } = await supabase.auth.getUser();
         if (
           user &&
-          (user.email === "visitante@pechincha.app" ||
-           user.user_metadata?.nome === "Visitante")
+          (user.is_anonymous ||
+           user.user_metadata?.nome === "Visitante" ||
+           user.email?.includes("guest") ||
+           user.email === "visitante@pechincha.app")
         ) {
           setIsGuest(true);
         } else {
