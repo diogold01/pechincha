@@ -184,6 +184,15 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 ## Remoção de Senhas Hardcoded e Autenticação Anônima
 - **Correção de Alerta de Segurança (GitGuardian) ([src/app/login/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/login/page.tsx)):** Eliminadas as constantes de credenciais temporárias que acionaram o scanner de segurança do GitGuardian. O login de visitante agora utiliza a autenticação anônima nativa do Supabase (`signInAnonymously`) e variáveis de ambiente, sem nenhuma senha escrita no código-fonte.
 
+---
+
+## Importação Inteligente de Cupom Fiscal (QR Code, PDF e Link SEFAZ)
+- **Central de Entrada Multicanal ([src/app/mais/cupom/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/cupom/page.tsx) e [src/components/QrCodeScanner.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/QrCodeScanner.tsx)):** Criada a tela de importação em Mais > "Importar Cupom Fiscal" com leitor de QR Code integrado à câmera traseira/frontal, upload de Danfe em PDF e leitor de link ou texto colado.
+- **Leitor e Parser de Cupons ([src/lib/cupom-parser.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-parser.ts) e [src/app/api/cupom/parse/route.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/api/cupom/parse/route.ts)):** Rota de API dedicada para consultar páginas da SEFAZ ou extrair texto de PDFs e cupons brutos, padronizando unidades, valores, quantidades e extração de marcas e mercado emissor.
+- **Motor de Comparação e Semelhança ([src/lib/cupom-matcher.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-matcher.ts)):** Algoritmo inteligente que cruza o nome do item da nota com o catálogo do usuário via Levenshtein e Jaccard similarity, sugere o setor correto por palavras-chave e identifica marcas populares.
+- **Tabela Comparativa e Conversão em Carrinho:** Interface responsiva que permite ao usuário escolher entre "É o mesmo" (atualizando o preço de histórico) ou "Cadastrar como novo" com nome limpo e setor sugerido. Gera automaticamente o carrinho ativo pronto para compra ao vivo ou finalização no histórico.
+
+
 
 
 

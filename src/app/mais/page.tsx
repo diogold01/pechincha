@@ -15,6 +15,7 @@ import {
   AlertCircle,
   History,
   Download,
+  QrCode,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
@@ -551,8 +552,31 @@ export default function MaisPage() {
               </div>
             </section>
 
-            {/* 4. HISTÓRICO E EXPORTAÇÃO */}
+            {/* 4. ATALHOS, CUPOM E EXPORTAÇÃO */}
             <section className="bg-card border border-border rounded-card p-4 flex flex-col divide-y divide-border shadow-sm">
+              <button
+                type="button"
+                onClick={() => router.push("/mais/cupom")}
+                className="flex items-center justify-between py-2.5 px-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
+                    <QrCode className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-extrabold text-text-main flex items-center gap-1.5">
+                      <span>Importar Cupom Fiscal</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-primary text-white">Novo</span>
+                    </div>
+                    <div className="text-xs text-text-muted">
+                      Ler QR Code da nota, PDF ou link para gerar carrinho automático
+                    </div>
+                  </div>
+                </div>
+                <span className="h-9 px-3 rounded-xl bg-primary-light text-primary-hover font-bold text-xs flex items-center justify-center shrink-0">
+                  Importar
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={() => router.push("/historico")}
