@@ -208,6 +208,15 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Toque na Tela para Focar a Câmera (Tap-to-Focus) ([src/components/QrCodeScanner.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/QrCodeScanner.tsx)):** Implementado toque direto na tela do visor para focar (`single-shot` com retorno contínuo e mapeamento de coordenadas `pointsOfInterest`), acompanhado de mira animada em tempo real e botão manual de "Focar" para garantir máxima nitidez ao aproximar cupons físicos.
 - **Seletor de Lentes e Visor Amplo Vertical ([src/components/QrCodeScanner.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/QrCodeScanner.tsx)):** Adicionada detecção e seleção de lentes traseiras (permitindo alternar da lente 0.6x ultra-wide de foco fixo para a lente principal 1x que possui motor de autofoco físico), além de ampliar o visor para formato vertical (450px a 600px com botão de expandir) ideal para enquadrar cupons inteiros.
 
+---
+
+## Suporte a Descontos de Atacado, Agrupamento de Itens e Ajuste de Preço
+- **Detecção de Descontos e Preços de Atacado ([src/lib/cupom-parser.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-parser.ts)):** O extrator agora identifica linhas de desconto por item aplicadas pelo PDV de supermercados/atacadistas (ex: `DESCONTO -13,10% R$ -0,30 1,99`), além de ler os blocos de totais de desconto da SEFAZ (`Descontos R$: 3,00` no resumo).
+- **Agrupamento Automático de Itens Idênticos ([src/lib/cupom-parser.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-parser.ts)):** Itens bipados repetidamente na mesma compra (como 3 oréganos de 1 un) agora são consolidados automaticamente em uma única linha (3 un) com valores somados, tornando a conferência muito mais limpa e organizada.
+- **Edição Direta de Preço Unitário na Tabela Comparativa ([src/app/mais/cupom/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/cupom/page.tsx)):** Adicionado campo numérico editável em cada produto da tabela para ajustar o preço unitário na hora, com recálculo automático do subtotal do item e do total geral do carrinho.
+- **Botão de Preço de Atacado e Histórico Inteligente ([src/app/mais/cupom/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/cupom/page.tsx) e [src/lib/cupom-matcher.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-matcher.ts)):** Cada item possui um botão interativo para alternar entre "Preço Varejo" e "🏷️ Preço Atacado". Ao gerar o carrinho, o Pechincha salva na tabela `prices` do Supabase com `tipo: 'atacado'` ou `tipo: 'varejo'`, alimentando a inteligência de comparação de preços do app.
+- **Aviso de Desconto SEFAZ na Conferência ([src/app/mais/cupom/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/cupom/page.tsx)):** Quando a SEFAZ informa desconto global na nota (como os R$ 3,00), um aviso explicativo é exibido no topo da tela orientando o usuário a conferir os produtos que tiveram desconto no atacadista.
+
 
 
 

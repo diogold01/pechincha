@@ -11,6 +11,9 @@ export interface ItemCupomFiscal {
   unidade: string;
   valor_unitario: number;
   valor_total: number;
+  valor_original?: number;
+  desconto?: number;
+  eh_atacado?: boolean;
   marca_extraida?: string;
   descartar?: boolean;
 }
@@ -21,6 +24,9 @@ export interface DadosCupomFiscal {
   data_emissao?: string;
   chave_acesso?: string;
   total_cupom?: number;
+  total_bruto?: number;
+  total_descontos?: number;
+  total_pago?: number;
   itens: ItemCupomFiscal[];
   aviso?: string;
 }
@@ -90,6 +96,35 @@ export function parseNumeroBR(valor: string | number): number {
 }
 
 /**
+ * Agrupa itens idênticos/repetidos na mesma nota (ex: 3 oréganos de 1 un viram 1 item consolidado de 3 un)
+ */
+export function agruparItensCupom(itens: ItemCupomFiscal[]): ItemCupomFiscal[] {
+  const mapa = new Map<string, ItemCupomFiscal>();
+
+  for (const it of itens) {
+    const chave = `${it.descricao.trim().toLowerCase()}_${it.unidade.trim().toLowerCase()}_${it.valor_unitario.toFixed(2)}`;
+    if (mapa.has(chave)) {
+      const existente = mapa.get(chave)!;
+      existente.quantidade = Number((existente.quantidade + it.quantidade).toFixed(3));
+      existente.valor_total = Number((existente.valor_total + it.valor_total).toFixed(2));
+      if (it.desconto) {
+        existente.desconto = Number(((existente.desconto || 0) + it.desconto).toFixed(2));
+      }
+      if (it.valor_original) {
+        existente.valor_original = Number(((existente.valor_original || 0) + it.valor_original).toFixed(2));
+      }
+      if (it.eh_atacado) {
+        existente.eh_atacado = true;
+      }
+    } else {
+      mapa.set(chave, { ...it });
+    }
+  }
+
+  return Array.from(mapa.values());
+}
+
+/**
  * Faz parsing do HTML da página de consulta da SEFAZ (NFC-e padrão nacional Encat / SVRS / SP / MT / etc.)
  */
 export function parseCupomHtml(html: string): DadosCupomFiscal {
@@ -127,6 +162,14 @@ export function parseCupomHtml(html: string): DadosCupomFiscal {
                      html.match(/(?:Valor a pagar|Valor total|Total R\$)[:\s]*R?\$?\s*([0-9]+[.,][0-9]{2})/i);
   if (totalMatch && totalMatch[1]) {
     totalCupom = parseNumeroBR(totalMatch[1]);
+  }
+
+  // Total de Descontos no HTML
+  const descHtmlMatch = html.match(/(?:Descontos?|Total de Descontos?)[:\s]*<span[^>]*>([^<]+)<\/span>/i) ||
+                        html.match(/(?:Descontos?|Total de Descontos?)[:\s]*R?\$?\s*([0-9]+[.,][0-9]{2})/i);
+  let totalDescontosHtml: number | undefined;
+  if (descHtmlMatch && descHtmlMatch[1]) {
+    totalDescontosHtml = parseNumeroBR(descHtmlMatch[1]);
   }
 
   // 2. Extração dos Itens da Tabela
@@ -182,12 +225,15 @@ export function parseCupomHtml(html: string): DadosCupomFiscal {
     return parseCupomTexto(html.replace(/<[^>]+>/g, " \n "));
   }
 
+  const itensAgrupados = agruparItensCupom(itens);
+
   return {
     mercado_nome: mercadoNome,
     mercado_cnpj: mercadoCnpj,
     data_emissao: dataEmissao,
     total_cupom: totalCupom,
-    itens,
+    total_descontos: totalDescontosHtml,
+    itens: itensAgrupados,
   };
 }
 
@@ -200,6 +246,9 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
   let mercadoCnpj: string | undefined;
   let dataEmissao: string | undefined;
   let totalCupom: number | undefined;
+  let totalBruto: number | undefined;
+  let totalDescontos: number | undefined;
+  let totalPago: number | undefined;
 
   // Busca CNPJ
   const cnpjMatch = textoBruto.match(/([0-9]{2}\.[0-9]{3}\.[0-9]{3}\/[0-9]{4}-[0-9]{2})/);
@@ -220,6 +269,26 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
     textoBruto.match(/Valor a pagar R\$:\s*\n?\s*([0-9]+[.,][0-9]{2})/i);
   if (totalMatch) {
     totalCupom = parseNumeroBR(totalMatch[1]);
+  }
+
+  // Busca Desconto direto
+  const descontoMatch =
+    textoBruto.match(/(?:Descontos?|Total de Descontos?)[:\s]*R?\$?\s*([0-9]+[.,][0-9]{2})/i) ||
+    textoBruto.match(/Descontos R\$:\s*\n?\s*([0-9]+[.,][0-9]{2})/i);
+  if (descontoMatch) {
+    totalDescontos = parseNumeroBR(descontoMatch[1]);
+  }
+
+  // Busca Bloco de Totais SEFAZ MS (onde vem total bruto, desconto e valor a pagar empilhados)
+  const regexBlocoTotais = /([0-9]+[.,][0-9]{2})\s*\n\s*([0-9]+[.,][0-9]{2})\s*\n\s*([0-9]+[.,][0-9]{2})\s*\n\s*Valor\s*pago/i;
+  const matchBloco = textoBruto.match(regexBlocoTotais);
+  if (matchBloco) {
+    totalBruto = parseNumeroBR(matchBloco[1]);
+    totalDescontos = parseNumeroBR(matchBloco[2]);
+    totalPago = parseNumeroBR(matchBloco[3]);
+    if (!totalCupom || totalCupom === 0) {
+      totalCupom = totalPago;
+    }
   }
 
   const linhas = textoBruto
@@ -259,6 +328,24 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
   // Percorre as linhas identificando produtos
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i];
+
+    // Padrão de linha de Desconto aplicada pelo caixa / PDV
+    // Ex: "DESCONTO -13,10% R$ -0,30 1,99" ou "DESCONTO R$ -2,10 41,37"
+    const matchLinhaDesc = linha.match(
+      /^DESC(?:ONTO)?(?:\s+-[0-9]+[.,]?[0-9]*%)?\s*(?:R\$\s*)?(-?[0-9]+[.,][0-9]{2})\s+([0-9]+[.,][0-9]{2})$/i
+    );
+    if (matchLinhaDesc && itens.length > 0) {
+      const ultimo = itens[itens.length - 1];
+      const descVal = Math.abs(parseNumeroBR(matchLinhaDesc[1]));
+      const novoTotal = parseNumeroBR(matchLinhaDesc[2]);
+
+      ultimo.valor_original = ultimo.valor_total;
+      ultimo.desconto = descVal;
+      ultimo.valor_total = novoTotal;
+      ultimo.valor_unitario = Number((novoTotal / (ultimo.quantidade || 1)).toFixed(2));
+      ultimo.eh_atacado = true;
+      continue;
+    }
 
     // Ignora cabeçalhos, rodapé, totais e impostos
     if (
@@ -446,11 +533,16 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
     totalCupom = itens.reduce((acc, it) => acc + (it.valor_total || 0), 0);
   }
 
+  const itensAgrupados = agruparItensCupom(itens);
+
   return {
     mercado_nome: mercadoNome,
     mercado_cnpj: mercadoCnpj,
     data_emissao: dataEmissao,
-    total_cupom: totalCupom,
-    itens,
+    total_cupom: totalPago || totalCupom,
+    total_bruto: totalBruto,
+    total_descontos: totalDescontos,
+    total_pago: totalPago || totalCupom,
+    itens: itensAgrupados,
   };
 }
