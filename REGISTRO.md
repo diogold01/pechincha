@@ -199,6 +199,13 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Substituição da Biblioteca de PDF ([src/app/api/cupom/parse/route.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/api/cupom/parse/route.ts)):** Removido o pacote `pdf-parse` (que dependia de módulos binários C++ e quebrava nos servidores da Vercel retornando página de erro HTML em vez de dados) e implementado o `unpdf`, 100% puro em JavaScript e otimizado para nuvem.
 - **Leitura Aprimorada de Danfe / NFC-e ([src/lib/cupom-parser.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-parser.ts)):** Suporte para extrair itens com tabelas em múltiplas linhas e formatos estaduais (incluindo SEFAZ Mato Grosso do Sul), identificando razão social, produtos, quantidades e preços sem falhas.
 
+---
+
+## Refinamento do Parser de PDF, Permissões de Câmera e Design da Barra Inferior
+- **Correção Cirúrgica do Parser de Itens ([src/lib/cupom-parser.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-parser.ts) e [src/lib/cupom-matcher.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-matcher.ts)):** Corrigida a extração de comprovantes NFC-e (testado e validado diretamente com o PDF da SEFAZ-MS de 20 itens), separando corretamente a linha de descrição (`CENOURA kg`, `BATATA INGLESA kg`, etc.) das linhas de quantidade (`Qtde.: 0,83`), unidade (`kg`), valor unitário e valor total. Enriquecida também a inferência automática de setores (Hortifruti, Açougue, Padaria, Laticínios e Mercearia).
+- **Acesso à Câmera Sem Falhas ([src/components/QrCodeScanner.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/QrCodeScanner.tsx)):** Removidas restrições rígidas de resolução mínima que impediam navegadores móveis de abrir o stream da câmera e adicionado botão de reativação de permissões com instruções claras.
+- **Barra de Ação Responsiva ([src/app/mais/cupom/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/cupom/page.tsx)):** Redesenhado o rodapé da tabela comparativa com uma barra fixa translúcida (`backdrop-blur`) contendo o resumo dos itens à esquerda e o botão de ação à direita, eliminando quebras de linha e descompassos visuais em telas pequenas.
+
 
 
 

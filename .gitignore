@@ -49,6 +49,9 @@ Thumbs.db
 *token*.txt
 .git-token
 
+# Cupons fiscais locais em PDF
+*.pdf
+
 # Arquivos de instruções/regras de IA e Prompts (NÃO ENVIAR AO GITHUB)
 GEMINI.md
 docs/PROMPT.md
