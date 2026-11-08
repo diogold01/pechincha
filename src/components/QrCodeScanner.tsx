@@ -46,16 +46,33 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
   const elementId = "html5qr-code-scanner-region";
   const helperElementId = "html5qr-file-helper";
 
-  // Nome legível amigável para as lentes do aparelho
-  function formatarNomeCamera(label: string, index: number): string {
+  // Nome legível amigável para as lentes do aparelho (identifica Samsung Galaxy S23 e outros Androids)
+  function formatarNomeCamera(label: string, index: number, totalTraseiras: number): string {
     const l = (label || "").toLowerCase();
-    if (l.includes("wide") && !l.includes("ultra")) return "Principal 1x (Nítida)";
-    if (l.includes("ultra") || l.includes("0.6") || l.includes("0.5")) return "Ultra-Wide 0.6x";
-    if (l.includes("tele") || l.includes("zoom") || l.includes("3x")) return "Zoom 3x";
-    if (l.includes("macro")) return "Macro";
     if (l.includes("front") || l.includes("user")) return "Frontal";
-    if (l.includes("back") || l.includes("traseira")) return `Lente Traseira ${index + 1}`;
-    return label || `Lente ${index + 1}`;
+
+    // Padrão Samsung Galaxy Camera2:
+    // camera2 0 = Ultra-Wide 0.6x (sem foco mecânico)
+    // camera2 2 = Wide Principal 1.0x (com Dual Pixel AF)
+    // camera2 3 = Telefoto 3.0x
+    if (l.includes("camera2 0") || l.includes("camera 0") || l.includes("ultra") || l.includes("0.6") || l.includes("0.5")) {
+      return "0.6x Ultra-Wide";
+    }
+    if (l.includes("camera2 2") || l.includes("camera 2") || (l.includes("wide") && !l.includes("ultra")) || l.includes("main") || l.includes("primary")) {
+      return "1.0x Principal (Foco Nítido)";
+    }
+    if (l.includes("camera2 3") || l.includes("camera 3") || l.includes("tele") || l.includes("3x")) {
+      return "3.0x Telefoto";
+    }
+
+    // Se tiver mais de uma traseira e vier apenas como "Lente Traseira" ou número
+    if (totalTraseiras > 1) {
+      if (index === 0) return "0.6x Ultra-Wide";
+      if (index === 1) return "1.0x Principal (Foco Nítido)";
+      if (index === 2) return "3.0x Telefoto";
+    }
+
+    return "Traseira 1.0x";
   }
 
   useEffect(() => {
@@ -91,31 +108,51 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
         setListaCameras(devices);
 
-        // Seleção inteligente da melhor câmera traseira (evitando ultra-wide que não tem foco)
+        // Seleção inteligente da melhor câmera traseira (GARANTINDO a lente principal 1.0x com foco)
         let camIdToUse = cameraIdSelecionada;
         if (!camIdToUse && devices.length > 0) {
           const traseiras = devices.filter(
             (d) => !d.label.toLowerCase().includes("front") && !d.label.toLowerCase().includes("user")
           );
 
-          // Tenta escolher a câmera principal wide com foco automático
-          let preferida = traseiras.find(
-            (d) => d.label.toLowerCase().includes("wide") && !d.label.toLowerCase().includes("ultra")
-          );
+          if (traseiras.length === 1) {
+            camIdToUse = traseiras[0].id;
+          } else if (traseiras.length > 1) {
+            // No Samsung Galaxy (S20/S21/S22/S23/S24), a primeira traseira é quase sempre a 0.6x (sem foco mecânico).
+            // A lente principal 1.0x com foco automático é a "camera2 2" ou a segunda câmera traseira da lista!
+            let preferida = traseiras.find((d) => {
+              const l = d.label.toLowerCase();
+              return (
+                (l.includes("wide") && !l.includes("ultra")) ||
+                l.includes("camera2 2") ||
+                l.includes("camera 2") ||
+                l.includes("back 2") ||
+                l.includes("main") ||
+                l.includes("primary")
+              );
+            });
 
-          // Se tiver mais de uma traseira e a primeira for 0.6x ultra-wide, escolhe a segunda (1x principal)
-          if (!preferida && traseiras.length > 1) {
-            preferida =
-              traseiras.find(
-                (d) => !d.label.toLowerCase().includes("ultra") && !d.label.toLowerCase().includes("0.6")
-              ) || traseiras[1];
+            // Se não achou por nome específico, e a primeira traseira é 0.6x / camera2 0, seleciona a segunda!
+            if (!preferida) {
+              const primeiraLabel = traseiras[0].label.toLowerCase();
+              if (
+                primeiraLabel.includes("camera2 0") ||
+                primeiraLabel.includes("camera 0") ||
+                primeiraLabel.includes("ultra") ||
+                primeiraLabel.includes("0.6") ||
+                primeiraLabel.includes("0.5")
+              ) {
+                preferida = traseiras[1];
+              } else {
+                preferida = traseiras[1] || traseiras[0];
+              }
+            }
+
+            camIdToUse = preferida ? preferida.id : traseiras[0].id;
+          } else {
+            camIdToUse = devices[0].id;
           }
 
-          if (!preferida) {
-            preferida = traseiras[0] || devices[0];
-          }
-
-          camIdToUse = preferida.id;
           setCameraIdSelecionada(camIdToUse);
         }
 
@@ -151,14 +188,46 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
         if (!cancelado) {
           setIniciado(true);
-          // Tenta aplicar foco contínuo no hardware da lente após inicialização
+          // Força zoom 1.0x e foco contínuo mecânico no sensor físico da câmera
           setTimeout(async () => {
             try {
-              await html5QrCode.applyVideoConstraints({
-                advanced: [{ focusMode: "continuous" } as any],
-              } as any);
+              const video = document.querySelector(
+                `#${elementId} video`
+              ) as HTMLVideoElement | null;
+              const stream = video?.srcObject as MediaStream | null;
+              const track = stream?.getVideoTracks()[0];
+
+              if (track) {
+                const caps = (track.getCapabilities?.() || {}) as any;
+                const advancedConstraints: any = {};
+
+                // Se o zoom mínimo for menor que 1.0 (ex: 0.6x no Samsung S23), força zoom: 1.0 imediatamente!
+                if (caps.zoom && caps.zoom.min < 1.0 && caps.zoom.max >= 1.0) {
+                  advancedConstraints.zoom = 1.0;
+                  setZoomAtual(1.0);
+                }
+
+                // Aplica autofoco contínuo mecânico
+                if (
+                  caps.focusMode &&
+                  Array.isArray(caps.focusMode) &&
+                  caps.focusMode.includes("continuous")
+                ) {
+                  advancedConstraints.focusMode = "continuous";
+                }
+
+                if (Object.keys(advancedConstraints).length > 0) {
+                  await track.applyConstraints({
+                    advanced: [advancedConstraints],
+                  });
+                }
+              } else {
+                await html5QrCode.applyVideoConstraints({
+                  advanced: [{ zoom: 1.0, focusMode: "continuous" } as any],
+                } as any);
+              }
             } catch {}
-          }, 600);
+          }, 450);
         }
       } catch (err: any) {
         if (!cancelado) {
@@ -198,13 +267,22 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
   async function alternarZoom(nivel: number) {
     setZoomAtual(nivel);
-    if (scannerRef.current) {
-      try {
+    try {
+      const video = document.querySelector(
+        `#${elementId} video`
+      ) as HTMLVideoElement | null;
+      const stream = video?.srcObject as MediaStream | null;
+      const track = stream?.getVideoTracks()[0];
+      if (track) {
+        await track.applyConstraints({
+          advanced: [{ zoom: nivel } as any],
+        });
+      } else if (scannerRef.current) {
         await scannerRef.current.applyVideoConstraints({
           advanced: [{ zoom: nivel } as any],
         });
-      } catch {}
-    }
+      }
+    } catch {}
   }
 
   // Toque na tela para focar a câmera no ponto tocado (Tap-to-Focus)
@@ -339,26 +417,33 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
       {listaCameras.length > 1 && (
         <div className="w-full max-w-md flex flex-col gap-1.5 bg-background p-2.5 rounded-2xl border border-border">
           <span className="text-[11px] font-bold text-text-muted flex items-center justify-between">
-            <span>📷 Trocar Lente da Câmera:</span>
-            <span className="text-[10px] text-primary font-normal">
-              Dica: escolha a lente com foco
+            <span>📷 Lente da Câmera:</span>
+            <span className="text-[10px] text-primary font-bold">
+              ✓ 1.0x recomendada para foco
             </span>
           </span>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-            {listaCameras.map((cam, idx) => (
-              <button
-                key={cam.id}
-                type="button"
-                onClick={() => selecionarCamera(cam.id)}
-                className={`h-8 px-3 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
-                  cameraIdSelecionada === cam.id
-                    ? "bg-primary text-white shadow-xs"
-                    : "bg-card border border-border text-text-muted hover:text-text-main"
-                }`}
-              >
-                <span>{formatarNomeCamera(cam.label, idx)}</span>
-              </button>
-            ))}
+            {listaCameras.map((cam, idx) => {
+              const traseiras = listaCameras.filter(
+                (d) =>
+                  !d.label.toLowerCase().includes("front") &&
+                  !d.label.toLowerCase().includes("user")
+              );
+              return (
+                <button
+                  key={cam.id}
+                  type="button"
+                  onClick={() => selecionarCamera(cam.id)}
+                  className={`h-8 px-3 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                    cameraIdSelecionada === cam.id
+                      ? "bg-primary text-white shadow-xs"
+                      : "bg-card border border-border text-text-muted hover:text-text-main"
+                  }`}
+                >
+                  <span>{formatarNomeCamera(cam.label, idx, traseiras.length)}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -473,31 +558,44 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
       {/* Controles de Foco e Zoom */}
       {iniciado && !erroCamera && (
         <div className="flex flex-wrap items-center justify-center gap-2 w-full max-w-md">
-          {/* Seletor de Zoom */}
+          {/* Seletor de Zoom (Garante 1.0x como Padrão) */}
           <div className="flex items-center bg-card border border-border rounded-full p-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => alternarZoom(0.6)}
+              className={`h-8 px-2.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                zoomAtual === 0.6
+                  ? "bg-primary text-white shadow-2xs"
+                  : "text-text-muted hover:text-text-main"
+              }`}
+              title="Lente ultra-aberta 0.6x (sem foco macro)"
+            >
+              0.6x
+            </button>
             <button
               type="button"
               onClick={() => alternarZoom(1)}
               className={`h-8 px-3 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 zoomAtual === 1
-                  ? "bg-primary text-white"
+                  ? "bg-primary text-white shadow-2xs"
                   : "text-text-muted hover:text-text-main"
               }`}
+              title="Lente principal 1.0x com foco automático nítido"
             >
-              1x
+              1.0x (Nítida)
             </button>
             <button
               type="button"
               onClick={() => alternarZoom(2)}
               className={`h-8 px-3 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                 zoomAtual === 2
-                  ? "bg-primary text-white"
+                  ? "bg-primary text-white shadow-2xs"
                   : "text-text-muted hover:text-text-main"
               }`}
               title="Aumenta o zoom para focar o papel a 25cm"
             >
               <ZoomIn className="w-3 h-3" />
-              <span>2x (Foco Papel)</span>
+              <span>2.0x</span>
             </button>
           </div>
 
