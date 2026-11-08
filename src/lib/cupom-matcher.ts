@@ -15,6 +15,7 @@ export interface SugestaoMatchProduto {
   marcaConfirmada: string;
   setorSugeridoId?: string | null;
   nomeFormatadoNovo: string;
+  precoDigitadoTexto?: string;
 }
 
 /**
@@ -194,6 +195,7 @@ export function correlacionarItensCupom(
       marcaConfirmada: item.marca_extraida || "",
       setorSugeridoId: ehMesmo && melhorProduto ? melhorProduto.sector_id : (setor?.id || null),
       nomeFormatadoNovo: formatarNomeParaCadastro(item.descricao),
+      precoDigitadoTexto: item.valor_unitario > 0 ? item.valor_unitario.toFixed(2).replace(".", ",") : "",
     };
   });
 }
