@@ -214,7 +214,10 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
   }
 
   // Busca Total
-  const totalMatch = textoBruto.match(/(?:TOTAL|VALOR A PAGAR|TOTAL R\$|TOTAL LIQUIDO)[:\s]*R?\$?\s*([0-9]+[.,][0-9]{2})/i);
+  const totalMatch =
+    textoBruto.match(/(?:VALOR PAGO R\$|VALOR A PAGAR R\$|VALOR A PAGAR|TOTAL R\$|TOTAL LIQUIDO|TOTAL)[:\s]*R?\$?\s*([0-9]+[.,][0-9]{2})/i) ||
+    textoBruto.match(/Valor pago R\$:\s*\n?\s*([0-9]+[.,][0-9]{2})/i) ||
+    textoBruto.match(/Valor a pagar R\$:\s*\n?\s*([0-9]+[.,][0-9]{2})/i);
   if (totalMatch) {
     totalCupom = parseNumeroBR(totalMatch[1]);
   }
@@ -229,7 +232,7 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
   if (razaoSocialMatch) {
     mercadoNome = razaoSocialMatch[1].trim();
   } else {
-    for (const l of linhas.slice(0, 8)) {
+    for (const l of linhas.slice(0, 10)) {
       const lLower = l.toLowerCase();
       if (
         !lLower.includes("governo") &&
@@ -239,6 +242,9 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
         !lLower.includes("nfc-e") &&
         !lLower.includes("sat") &&
         !lLower.includes("consulta") &&
+        !lLower.includes("imprimir") &&
+        !lLower.includes("resumo") &&
+        !lLower.includes("visualizar") &&
         !lLower.includes("cnpj") &&
         !lLower.includes("documento auxiliar") &&
         !lLower.includes("via consumidor") &&
@@ -256,14 +262,75 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
 
     // Ignora cabeçalhos, rodapé, totais e impostos
     if (
-      /^(TOTAL|VALOR A PAGAR|FORMA DE PAGAMENTO|CARTAO|CARTÃO|DINHEIRO|TROCO|CHAVE DE ACESSO|PROTOCOLO|EMISSAO|EMISSÃO|TRIBUTOS|ICMS|PROCON|CONSULTE PELA|DOCUMENTO AUXILIAR|NFC-E|GOVERNO|SECRETARIA)/i.test(
+      /^(TOTAL|VALOR A PAGAR|VALOR PAGO|FORMA DE PAGAMENTO|CARTAO|CARTÃO|DINHEIRO|TROCO|CHAVE DE ACESSO|PROTOCOLO|EMISSAO|EMISSÃO|TRIBUTOS|ICMS|PROCON|CONSULTE PELA|DOCUMENTO AUXILIAR|NFC-E|GOVERNO|SECRETARIA)/i.test(
         linha
       )
     ) {
       continue;
     }
 
-    // Padrão A: Linha com tabela em pipes (|)
+    // Padrão 1: SEFAZ MS / Encat Multi-Linha
+    // Ex: "Qtde.:0,83UN: KGVl. Unit.: 3,95" ou "Qtde.:1 UN: UNVl. Unit.: 14,59"
+    const matchSefazMs = linha.match(
+      /Qtde\.?:?\s*([0-9]+[.,]?[0-9]*)\s*UN:\s*([A-Za-z]+)\s*Vl\.?\s*Unit\.?:?\s*([0-9]+[.,][0-9]{2})/i
+    );
+
+    if (matchSefazMs) {
+      let desc = "";
+      for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
+        const lj = linhas[j];
+        if (
+          !lj.toLowerCase().startsWith("vl. total") &&
+          !/^\d+[.,]\d{2}$/.test(lj) &&
+          !/^\(?código:?\s*\d*\s*\)?$/i.test(lj) &&
+          !/^\d+\s*\)$/.test(lj)
+        ) {
+          desc = lj;
+          break;
+        }
+      }
+
+      desc = desc
+        .replace(/\(Código:[^)]*\)/gi, "")
+        .replace(/\(Código:?$/gi, "")
+        .replace(/^\d+[\s\.\-]+/, "")
+        .trim();
+
+      const qtd = parseNumeroBR(matchSefazMs[1]) || 1;
+      const un = normalizarUnidade(matchSefazMs[2] || "un");
+      const vlUnit = parseNumeroBR(matchSefazMs[3]);
+
+      let vlTotal = vlUnit * qtd;
+      if (i + 1 < linhas.length) {
+        if (/^vl\.?\s*total/i.test(linhas[i + 1])) {
+          if (i + 2 < linhas.length && /^[0-9]+[.,][0-9]{2}$/.test(linhas[i + 2])) {
+            vlTotal = parseNumeroBR(linhas[i + 2]);
+            i += 2;
+          } else {
+            i += 1;
+          }
+        } else if (/^[0-9]+[.,][0-9]{2}$/.test(linhas[i + 1])) {
+          vlTotal = parseNumeroBR(linhas[i + 1]);
+          i += 1;
+        }
+      }
+
+      if (desc.length > 1 && vlUnit > 0) {
+        itens.push({
+          id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${itens.length}`,
+          descricao: desc,
+          quantidade: qtd,
+          unidade: un,
+          valor_unitario: vlUnit,
+          valor_total: vlTotal,
+          marca_extraida: extrairMarcaDoTexto(desc),
+          descartar: /sacola/i.test(desc),
+        });
+        continue;
+      }
+    }
+
+    // Padrão 2: Linha com tabela em pipes (|)
     if (linha.includes("|")) {
       const cols = linha.split("|").map((c) => c.trim()).filter((c) => c.length > 0);
       if (cols.length >= 3) {
@@ -275,7 +342,7 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
           const vlUnit = penultCol > 0 ? penultCol : ultCol;
 
           itens.push({
-            id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${itens.length}`,
             descricao: desc.replace(/^\d+[\s\.\-]+/, "").trim(),
             quantidade: 1,
             unidade: normalizarUnidade(un),
@@ -289,9 +356,7 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
       }
     }
 
-    // Padrão B: Multi-linha de NFC-e
-    // Linha atual = Descrição do produto (ex: "ARROZ TIO JOAO 5KG" ou "001 ARROZ TIO JOAO 5KG")
-    // Linha seguinte = "Qtde.: 1 UN: UN Vl. Unit.: 24,90 Vl. Total: 24,90" ou "1 UN X 24,90 24,90"
+    // Padrão 3: Multi-linha geral de NFC-e
     if (i + 1 < linhas.length) {
       const proxLinha = linhas[i + 1];
       const matchQtdVl =
@@ -313,7 +378,7 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
 
         if (desc.length > 2 && vlUnit > 0) {
           itens.push({
-            id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${itens.length}`,
             descricao: desc,
             quantidade: qtd,
             unidade: un,
@@ -328,52 +393,57 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
       }
     }
 
-    // Padrão C: Linha única completa com valores no final
-    // Ex: "001 7891000100100 ARROZ TIO JOAO 5KG 2 UN X 24,90 49,80"
-    // Ou: "ARROZ TIO JOAO 5KG 1 UN 24,90"
-    // Ou: "LEITE CONDENSADO 395G ... 4,89"
-    const matchValores =
-      linha.match(/^(.*?)\s+([0-9]+[.,]?[0-9]*)\s*([A-Za-z]{2,3})\s*(?:X|\*|\/)?\s*([0-9]+[.,][0-9]{2})\s+([0-9]+[.,][0-9]{2})$/i) ||
-      linha.match(/^(.*?)\s+([0-9]+[.,][0-9]{2})\s*$/);
+    // Padrão 4: Linha única com valores no final
+    // Importante: linha NÃO pode começar com "Qtde" nem "Vl" para não confundir cabeçalhos soltos com descrição
+    if (!linha.toLowerCase().startsWith("qtde") && !linha.toLowerCase().startsWith("vl.")) {
+      const matchValores =
+        linha.match(/^(.*?)\s+([0-9]+[.,]?[0-9]*)\s*([A-Za-z]{2,3})\s*(?:X|\*|\/)?\s*([0-9]+[.,][0-9]{2})\s+([0-9]+[.,][0-9]{2})$/i) ||
+        linha.match(/^(.*?)\s+([0-9]+[.,][0-9]{2})\s*$/);
 
-    if (matchValores) {
-      if (matchValores.length === 6) {
-        const desc = matchValores[1].replace(/^\d+[\s\.\-]+/, "").trim();
-        const qtd = parseNumeroBR(matchValores[2]) || 1;
-        const un = normalizarUnidade(matchValores[3]);
-        const vlUnit = parseNumeroBR(matchValores[4]);
-        const vlTotal = parseNumeroBR(matchValores[5]);
+      if (matchValores) {
+        if (matchValores.length === 6) {
+          const desc = matchValores[1].replace(/^\d+[\s\.\-]+/, "").trim();
+          const qtd = parseNumeroBR(matchValores[2]) || 1;
+          const un = normalizarUnidade(matchValores[3]);
+          const vlUnit = parseNumeroBR(matchValores[4]);
+          const vlTotal = parseNumeroBR(matchValores[5]);
 
-        if (desc.length > 2 && vlUnit > 0) {
-          itens.push({
-            id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            descricao: desc,
-            quantidade: qtd,
-            unidade: un,
-            valor_unitario: vlUnit,
-            valor_total: vlTotal,
-            marca_extraida: extrairMarcaDoTexto(desc),
-            descartar: /sacola/i.test(desc),
-          });
-        }
-      } else if (matchValores.length === 3) {
-        const desc = matchValores[1].replace(/^\d+[\s\.\-]+/, "").trim();
-        const vlTotal = parseNumeroBR(matchValores[2]);
+          if (desc.length > 2 && vlUnit > 0) {
+            itens.push({
+              id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${itens.length}`,
+              descricao: desc,
+              quantidade: qtd,
+              unidade: un,
+              valor_unitario: vlUnit,
+              valor_total: vlTotal,
+              marca_extraida: extrairMarcaDoTexto(desc),
+              descartar: /sacola/i.test(desc),
+            });
+          }
+        } else if (matchValores.length === 3) {
+          const desc = matchValores[1].replace(/^\d+[\s\.\-]+/, "").trim();
+          const vlTotal = parseNumeroBR(matchValores[2]);
 
-        if (desc.length > 2 && vlTotal > 0) {
-          itens.push({
-            id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            descricao: desc,
-            quantidade: 1,
-            unidade: "un",
-            valor_unitario: vlTotal,
-            valor_total: vlTotal,
-            marca_extraida: extrairMarcaDoTexto(desc),
-            descartar: /sacola/i.test(desc),
-          });
+          if (desc.length > 2 && vlTotal > 0) {
+            itens.push({
+              id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${itens.length}`,
+              descricao: desc,
+              quantidade: 1,
+              unidade: "un",
+              valor_unitario: vlTotal,
+              valor_total: vlTotal,
+              marca_extraida: extrairMarcaDoTexto(desc),
+              descartar: /sacola/i.test(desc),
+            });
+          }
         }
       }
     }
+  }
+
+  // Se o total_cupom não foi encontrado no cabeçalho/rodapé, calcula a soma dos itens
+  if (!totalCupom || totalCupom === 0) {
+    totalCupom = itens.reduce((acc, it) => acc + (it.valor_total || 0), 0);
   }
 
   return {

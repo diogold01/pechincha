@@ -122,11 +122,11 @@ export function inferirSetorPorNome(nome: string, setores: Sector[]): Sector | n
   const n = normalizarTexto(nome);
 
   const regras: { regex: RegExp; nomeSetor: string }[] = [
-    { regex: /\b(maca|banana|laranja|limao|tomate|batata|cebola|alho|alface|cenoura|fruta|legume|verdura)\b/i, nomeSetor: "Hortifruti" },
-    { regex: /\b(carne|patinho|alcatra|contra|coxao|picanha|frango|peito|sobrecoxa|peixe|tilapia|salmao|costela|bife)\b/i, nomeSetor: "Açougue" },
-    { regex: /\b(pao|bisnaga|torrada|croissant|bolo|rosca|baguete)\b/i, nomeSetor: "Padaria" },
-    { regex: /\b(leite|queijo|mussarela|presunto|iogurte|manteiga|requeijao|parmesao|prato|ricota|nata)\b/i, nomeSetor: "Laticínios" },
-    { regex: /\b(arroz|feijao|macarrao|oleo|azeite|farinha|acucar|sal|cafe|molho|extrato|milho|ervilha|sardinha|atum)\b/i, nomeSetor: "Mercearia" },
+    { regex: /\b(maca|banana|laranja|limao|tomate|batata|cebola|alho|alface|cenoura|fruta|legume|verdura|chuchu|uva|coco|manga|mamao|abacaxi|melancia|melao|pera|morango|abobrinha|pepino|beterraba|mandioca)\b/i, nomeSetor: "Hortifruti" },
+    { regex: /\b(carne|patinho|alcatra|contra|coxao|picanha|frango|peito|sobrecoxa|peixe|tilapia|salmao|costela|bife|coxinha|asa|filezinho|ling|linguica|suina|bov|peixinho|acem|paleta|moida|costelinha|bacon|pernil)\b/i, nomeSetor: "Açougue" },
+    { regex: /\b(pao|bisnaga|torrada|croissant|bolo|rosca|baguete|panetone|chocotone|biscoito|bolacha)\b/i, nomeSetor: "Padaria" },
+    { regex: /\b(leite|queijo|mussarela|presunto|iogurte|iog|danone|manteiga|requeijao|parmesao|prato|ricota|nata)\b/i, nomeSetor: "Laticínios" },
+    { regex: /\b(arroz|feijao|macarrao|oleo|azeite|farinha|acucar|sal|cafe|molho|extrato|milho|ervilha|sardinha|atum|oregano|camomila|manjericao|vinagre|tempero|condimento|fermento)\b/i, nomeSetor: "Mercearia" },
     { regex: /\b(refrigerante|suco|cerveja|agua|vodka|vinho|energetico|cha|nectar|coca|pepsi)\b/i, nomeSetor: "Bebidas" },
     { regex: /\b(detergente|sabao|amaciante|desinfetante|cloro|agua sanitaria|esponja|vassoura|multiuso|limpador)\b/i, nomeSetor: "Limpeza" },
     { regex: /\b(shampoo|condicionador|sabonete|creme dental|pasta|desodorante|escova|fio dental|hidratante)\b/i, nomeSetor: "Higiene" },

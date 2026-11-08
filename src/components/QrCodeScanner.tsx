@@ -60,11 +60,9 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
           aspectRatio: 1.0,
         };
 
-        // Preferência por câmera de alta resolução com foco contínuo
-        const videoConstraints: MediaTrackConstraints = {
-          facingMode: cameraTraseira ? { ideal: "environment" } : { ideal: "user" },
-          width: { ideal: 1920, min: 1280 },
-          height: { ideal: 1080, min: 720 },
+        // Restrições de vídeo seguras para celular (sem min forçado para evitar OverconstrainedError)
+        const videoConstraints = {
+          facingMode: cameraTraseira ? "environment" : "user",
         };
 
         await html5QrCode.start(
@@ -190,10 +188,28 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
         {/* Mensagem de Erro de Câmera */}
         {erroCamera && (
-          <div className="absolute inset-0 bg-background/95 p-6 flex flex-col items-center justify-center text-center gap-3">
-            <CameraOff className="w-10 h-10 text-budget-red" />
+          <div className="absolute inset-0 bg-background/95 p-6 flex flex-col items-center justify-center text-center gap-2.5 z-10">
+            <CameraOff className="w-9 h-9 text-budget-red" />
             <p className="text-xs font-semibold text-budget-red-text max-w-xs">
               {erroCamera}
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                setErroCamera(null);
+                try {
+                  const stream = await navigator.mediaDevices?.getUserMedia({ video: true });
+                  stream?.getTracks().forEach((t) => t.stop());
+                } catch {}
+                setCameraTraseira((prev) => prev); // reinicia
+              }}
+              className="mt-1 h-9 px-4 rounded-xl bg-primary text-white text-xs font-bold shadow-xs hover:bg-primary-hover transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Tentar abrir câmera novamente</span>
+            </button>
+            <p className="text-[11px] text-text-muted max-w-xs">
+              Se o navegador bloqueou, toque no ícone de opções/cadeado na barra de endereços e autorize a Câmera.
             </p>
           </div>
         )}

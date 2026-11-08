@@ -401,7 +401,11 @@ export default function ImportarCupomPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-text-main pb-24 md:pb-8 md:pl-64">
+    <div
+      className={`min-h-screen flex flex-col bg-background text-text-main md:pl-64 ${
+        passo === 2 ? "pb-36 md:pb-24" : "pb-24 md:pb-8"
+      }`}
+    >
       <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-5xl mx-auto px-4 sm:px-6 md:px-8 pt-5 md:pt-8 flex flex-col gap-5">
         {/* Cabeçalho */}
         <div className="flex items-center justify-between gap-3">
@@ -834,27 +838,45 @@ export default function ImportarCupomPage() {
               })}
             </div>
 
-            {/* Botão Fixo de Conclusão / Geração do Carrinho */}
-            <div className="sticky bottom-20 md:bottom-6 z-20 pt-2 pb-1">
-              <button
-                type="button"
-                onClick={handleGerarCarrinhoFinal}
-                disabled={gerandoCarrinho}
-                className="w-full h-14 rounded-2xl bg-primary text-white font-extrabold text-base hover:bg-primary-hover shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
-              >
-                {gerandoCarrinho ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span>Gerando carrinho e atualizando preços...</span>
-                  </>
-                ) : (
-                  <>
-                    <ShoppingBag className="w-5 h-5" />
-                    <span>Gerar Carrinho da Compra ({itensRevisao.filter((i) => !i.itemCupom.descartar).length} itens)</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                )}
-              </button>
+            {/* Barra Inferior Fixa de Conclusão / Geração do Carrinho */}
+            <div className="fixed bottom-16 md:bottom-0 left-0 right-0 md:pl-64 bg-card/95 backdrop-blur-md border-t border-border p-3 sm:p-4 z-30 shadow-lg">
+              <div className="max-w-md md:max-w-4xl lg:max-w-5xl mx-auto flex items-center justify-between gap-3">
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-semibold text-text-muted truncate">
+                    Itens confirmados
+                  </span>
+                  <span className="text-sm sm:text-base font-extrabold text-text-main truncate">
+                    {itensRevisao.filter((i) => !i.itemCupom.descartar).length}{" "}
+                    {itensRevisao.filter((i) => !i.itemCupom.descartar).length === 1 ? "produto" : "produtos"} (
+                    {formatarMoeda(
+                      itensRevisao
+                        .filter((i) => !i.itemCupom.descartar)
+                        .reduce((acc, curr) => acc + (curr.itemCupom.valor_total || 0), 0)
+                    )}
+                    )
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGerarCarrinhoFinal}
+                  disabled={gerandoCarrinho}
+                  className="h-12 px-5 sm:px-8 rounded-2xl bg-primary text-white font-extrabold text-sm sm:text-base hover:bg-primary-hover shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 shrink-0"
+                >
+                  {gerandoCarrinho ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Gerando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingBag className="w-4 h-4" />
+                      <span>Gerar Carrinho</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
