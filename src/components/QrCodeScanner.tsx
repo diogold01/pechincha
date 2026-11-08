@@ -9,6 +9,8 @@ import {
   Image as ImageIcon,
   AlertCircle,
   Sparkles,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 
 interface QrCodeScannerProps {
@@ -16,11 +18,18 @@ interface QrCodeScannerProps {
   ativo: boolean;
 }
 
+interface CameraItem {
+  id: string;
+  label: string;
+}
+
 export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
   const [iniciado, setIniciado] = useState(false);
   const [erroCamera, setErroCamera] = useState<string | null>(null);
-  const [cameraTraseira, setCameraTraseira] = useState(true);
+  const [listaCameras, setListaCameras] = useState<CameraItem[]>([]);
+  const [cameraIdSelecionada, setCameraIdSelecionada] = useState<string>("");
   const [zoomAtual, setZoomAtual] = useState<number>(1);
+  const [telaCheia, setTelaCheia] = useState(false);
   const [lendoFoto, setLendoFoto] = useState(false);
   const [erroFoto, setErroFoto] = useState<string | null>(null);
 
@@ -36,6 +45,18 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const elementId = "html5qr-code-scanner-region";
   const helperElementId = "html5qr-file-helper";
+
+  // Nome legível amigável para as lentes do aparelho
+  function formatarNomeCamera(label: string, index: number): string {
+    const l = (label || "").toLowerCase();
+    if (l.includes("wide") && !l.includes("ultra")) return "Principal 1x (Nítida)";
+    if (l.includes("ultra") || l.includes("0.6") || l.includes("0.5")) return "Ultra-Wide 0.6x";
+    if (l.includes("tele") || l.includes("zoom") || l.includes("3x")) return "Zoom 3x";
+    if (l.includes("macro")) return "Macro";
+    if (l.includes("front") || l.includes("user")) return "Frontal";
+    if (l.includes("back") || l.includes("traseira")) return `Lente Traseira ${index + 1}`;
+    return label || `Lente ${index + 1}`;
+  }
 
   useEffect(() => {
     let cancelado = false;
@@ -58,22 +79,65 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
           }
         }
 
+        // Obtém a lista de todas as câmeras físicas do aparelho
+        let devices: CameraItem[] = [];
+        try {
+          devices = await Html5Qrcode.getCameras();
+        } catch {
+          devices = [];
+        }
+
+        if (cancelado) return;
+
+        setListaCameras(devices);
+
+        // Seleção inteligente da melhor câmera traseira (evitando ultra-wide que não tem foco)
+        let camIdToUse = cameraIdSelecionada;
+        if (!camIdToUse && devices.length > 0) {
+          const traseiras = devices.filter(
+            (d) => !d.label.toLowerCase().includes("front") && !d.label.toLowerCase().includes("user")
+          );
+
+          // Tenta escolher a câmera principal wide com foco automático
+          let preferida = traseiras.find(
+            (d) => d.label.toLowerCase().includes("wide") && !d.label.toLowerCase().includes("ultra")
+          );
+
+          // Se tiver mais de uma traseira e a primeira for 0.6x ultra-wide, escolhe a segunda (1x principal)
+          if (!preferida && traseiras.length > 1) {
+            preferida =
+              traseiras.find(
+                (d) => !d.label.toLowerCase().includes("ultra") && !d.label.toLowerCase().includes("0.6")
+              ) || traseiras[1];
+          }
+
+          if (!preferida) {
+            preferida = traseiras[0] || devices[0];
+          }
+
+          camIdToUse = preferida.id;
+          setCameraIdSelecionada(camIdToUse);
+        }
+
         const html5QrCode = new Html5Qrcode(elementId);
         scannerRef.current = html5QrCode;
 
         const config = {
           fps: 15,
-          qrbox: { width: 260, height: 260 },
-          aspectRatio: 1.0,
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minDim = Math.min(viewfinderWidth, viewfinderHeight);
+            return {
+              width: Math.min(Math.round(minDim * 0.72), 280),
+              height: Math.min(Math.round(minDim * 0.72), 280),
+            };
+          },
         };
 
-        // Restrições de vídeo seguras para celular (sem min forçado para evitar OverconstrainedError)
-        const videoConstraints = {
-          facingMode: cameraTraseira ? "environment" : "user",
-        };
+        // Inicia com o dispositivo específico selecionado ou fallback de ambiente
+        const cameraParam = camIdToUse ? camIdToUse : { facingMode: "environment" };
 
         await html5QrCode.start(
-          videoConstraints,
+          cameraParam,
           config,
           (decodedText) => {
             if (decodedText && decodedText.trim().length > 0) {
@@ -87,15 +151,13 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
         if (!cancelado) {
           setIniciado(true);
-          // Tenta aplicar foco contínuo no hardware da câmera após a inicialização do stream
+          // Tenta aplicar foco contínuo no hardware da lente após inicialização
           setTimeout(async () => {
             try {
               await html5QrCode.applyVideoConstraints({
                 advanced: [{ focusMode: "continuous" } as any],
               } as any);
-            } catch {
-              // Navegador ou hardware sem suporte a focusMode ignora
-            }
+            } catch {}
           }, 600);
         }
       } catch (err: any) {
@@ -122,15 +184,16 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
       if (scannerRef.current) {
         try {
           scannerRef.current.stop().catch(() => {});
-        } catch {
-          // Silencioso
-        }
+        } catch {}
       }
     };
-  }, [ativo, cameraTraseira, onScan]);
+  }, [ativo, cameraIdSelecionada, onScan]);
 
-  function alternarCamera() {
-    setCameraTraseira((prev) => !prev);
+  // Troca para uma lente específica selecionada pelo usuário
+  function selecionarCamera(id: string) {
+    if (id === cameraIdSelecionada) return;
+    setCameraIdSelecionada(id);
+    setIniciado(false);
   }
 
   async function alternarZoom(nivel: number) {
@@ -140,9 +203,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
         await scannerRef.current.applyVideoConstraints({
           advanced: [{ zoom: nivel } as any],
         });
-      } catch {
-        // Dispositivos que não suportam zoom programático mantêm normal
-      }
+      } catch {}
     }
   }
 
@@ -177,7 +238,6 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
         const sensorX = Math.round((x / rect.width) * (settings.width || 1280));
         const sensorY = Math.round((y / rect.height) * (settings.height || 720));
 
-        // Tenta passar o ponto de interesse para medição do foco
         if ("pointsOfInterest" in caps) {
           try {
             await track.applyConstraints({
@@ -186,14 +246,12 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
           } catch {}
         }
 
-        // Aciona o motor de foco (single-shot) para focar imediatamente no local
         try {
           await track.applyConstraints({
             advanced: [{ focusMode: "single-shot" } as any],
           });
         } catch {}
 
-        // Restaura para contínuo para manter o foco estável
         setTimeout(async () => {
           try {
             await track.applyConstraints({
@@ -206,16 +264,14 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
           advanced: [{ focusMode: "single-shot" } as any],
         });
       }
-    } catch {
-      // Ignora silenciosamente se o hardware não responder
-    } finally {
+    } catch {} finally {
       setTimeout(() => {
         setPontoFoco((prev) => ({ ...prev, ativo: false }));
       }, 1200);
     }
   }
 
-  // Focar no centro da mira via botão
+  // Focar no centro via botão
   function focarCentro() {
     const el = document.getElementById(elementId);
     if (!el) return;
@@ -264,7 +320,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
         onScan(decodedText.trim());
       } else {
         setErroFoto(
-          "Não conseguimos ler o QR Code nesta foto. Tente tirar mais perto ou com mais iluminação."
+          "Não conseguimos ler o QR Code nesta foto. Tente aproximar ou melhorar a luz."
         );
       }
     } catch {
@@ -279,29 +335,78 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
-      {/* Dica de toque para focar */}
-      {iniciado && !erroCamera && (
-        <p className="text-[11px] font-bold text-primary flex items-center gap-1.5 animate-pulse">
-          <span>👆 Toque na imagem para focar a câmera no papel</span>
-        </p>
+      {/* Seletor de Lentes Físicas do Aparelho (Permite trocar da 0.6x ultra-wide para a 1x com foco) */}
+      {listaCameras.length > 1 && (
+        <div className="w-full max-w-md flex flex-col gap-1.5 bg-background p-2.5 rounded-2xl border border-border">
+          <span className="text-[11px] font-bold text-text-muted flex items-center justify-between">
+            <span>📷 Trocar Lente da Câmera:</span>
+            <span className="text-[10px] text-primary font-normal">
+              Dica: escolha a lente com foco
+            </span>
+          </span>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            {listaCameras.map((cam, idx) => (
+              <button
+                key={cam.id}
+                type="button"
+                onClick={() => selecionarCamera(cam.id)}
+                className={`h-8 px-3 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
+                  cameraIdSelecionada === cam.id
+                    ? "bg-primary text-white shadow-xs"
+                    : "bg-card border border-border text-text-muted hover:text-text-main"
+                }`}
+              >
+                <span>{formatarNomeCamera(cam.label, idx)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* Container visual da câmera com suporte a clique/toque para focar */}
+      {/* Dica de toque para focar */}
+      {iniciado && !erroCamera && (
+        <div className="w-full max-w-md flex items-center justify-between px-1">
+          <p className="text-[11px] font-bold text-primary flex items-center gap-1.5 animate-pulse">
+            <span>👆 Toque na tela para focar o papel</span>
+          </p>
+          <button
+            type="button"
+            onClick={() => setTelaCheia((prev) => !prev)}
+            className="text-[11px] font-bold text-text-muted hover:text-text-main flex items-center gap-1 transition-colors cursor-pointer"
+          >
+            {telaCheia ? (
+              <>
+                <Minimize2 className="w-3.5 h-3.5" />
+                <span>Normal</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>Expandir tela</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Visor Amplo da Câmera (Com proporção vertical que cabe o cupom inteiro) */}
       <div
         onClick={handleToqueFocar}
-        className="relative w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden border-2 border-border shadow-inner flex items-center justify-center cursor-pointer select-none"
-        title="Toque para focar a câmera"
+        className={`relative w-full max-w-md bg-black rounded-3xl overflow-hidden border-2 border-border shadow-md flex items-center justify-center cursor-pointer select-none transition-all duration-300 ${
+          telaCheia ? "h-[540px] sm:h-[600px]" : "h-[400px] sm:h-[450px]"
+        }`}
+        title="Toque na tela para focar a câmera"
       >
         <div id={elementId} className="w-full h-full object-cover" />
 
         {/* Guia de mira visual quando a câmera estiver ativa */}
         {iniciado && !erroCamera && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="w-60 h-60 border-2 border-primary/70 rounded-2xl relative animate-pulse">
-              <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-lg" />
-              <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-lg" />
-              <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-lg" />
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-lg" />
+            <div className="w-64 h-64 border-2 border-primary/70 rounded-3xl relative animate-pulse shadow-inner">
+              <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-xl" />
+              <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-xl" />
+              <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-xl" />
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-xl" />
             </div>
           </div>
         )}
@@ -312,9 +417,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
             className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center transition-all duration-200"
             style={{ left: pontoFoco.x, top: pontoFoco.y }}
           >
-            {/* Onda expansiva */}
             <div className="w-20 h-20 border-2 border-primary/50 rounded-2xl animate-ping absolute" />
-            {/* Caixa de mira com cantos */}
             <div className="w-16 h-16 border-2 border-white rounded-xl relative shadow-xl flex items-center justify-center bg-primary/20 backdrop-blur-2xs">
               <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
               <div className="absolute -top-0.5 -left-0.5 w-3 h-3 border-t-2 border-l-2 border-primary" />
@@ -322,7 +425,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
               <div className="absolute -bottom-0.5 -left-0.5 w-3 h-3 border-b-2 border-l-2 border-primary" />
               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 border-b-2 border-r-2 border-primary" />
             </div>
-            <span className="absolute -bottom-5 text-[10px] font-extrabold text-white bg-black/70 px-2 py-0.5 rounded-full shadow-md whitespace-nowrap">
+            <span className="absolute -bottom-5 text-[10px] font-extrabold text-white bg-black/75 px-2 py-0.5 rounded-full shadow-md whitespace-nowrap">
               Focando...
             </span>
           </div>
@@ -331,7 +434,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
         {/* Mensagem de Erro de Câmera com Botão de Permissão */}
         {erroCamera && (
           <div className="absolute inset-0 bg-background/95 p-6 flex flex-col items-center justify-center text-center gap-2.5 z-10">
-            <CameraOff className="w-9 h-9 text-budget-red" />
+            <CameraOff className="w-10 h-10 text-budget-red" />
             <p className="text-xs font-semibold text-budget-red-text max-w-xs">
               {erroCamera}
             </p>
@@ -343,15 +446,15 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
                   const stream = await navigator.mediaDevices?.getUserMedia({ video: true });
                   stream?.getTracks().forEach((t) => t.stop());
                 } catch {}
-                setCameraTraseira((prev) => prev);
+                setCameraIdSelecionada((prev) => prev);
               }}
-              className="mt-1 h-9 px-4 rounded-xl bg-primary text-white text-xs font-bold shadow-xs hover:bg-primary-hover transition-all cursor-pointer flex items-center gap-1.5"
+              className="mt-1 h-10 px-4 rounded-xl bg-primary text-white text-xs font-bold shadow-xs hover:bg-primary-hover transition-all cursor-pointer flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Tentar abrir câmera novamente</span>
             </button>
             <p className="text-[11px] text-text-muted max-w-xs">
-              Se o navegador bloqueou, toque no ícone de opções/cadeado na barra de endereços e autorize a Câmera.
+              Se o navegador bloqueou, toque no ícone de cadeado no topo da tela e autorize a Câmera.
             </p>
           </div>
         )}
@@ -367,10 +470,10 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
         ) : null}
       </div>
 
-      {/* Controles de Foco, Zoom e Alternar Câmera */}
+      {/* Controles de Foco e Zoom */}
       {iniciado && !erroCamera && (
-        <div className="flex flex-wrap items-center justify-center gap-2 w-full max-w-sm">
-          {/* Seletor de Zoom (Ajuda a focar papel sem precisar aproximar demais) */}
+        <div className="flex flex-wrap items-center justify-center gap-2 w-full max-w-md">
+          {/* Seletor de Zoom */}
           <div className="flex items-center bg-card border border-border rounded-full p-1 shadow-2xs">
             <button
               type="button"
@@ -402,42 +505,32 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
           <button
             type="button"
             onClick={focarCentro}
-            className="h-9 px-3 rounded-full bg-card border border-border text-xs font-bold text-text-muted hover:text-text-main flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            className="h-9 px-3.5 rounded-full bg-card border border-border text-xs font-bold text-text-muted hover:text-text-main flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
             title="Refocar a câmera"
           >
             <Sparkles className="w-3.5 h-3.5 text-primary" />
-            <span>Focar</span>
-          </button>
-
-          {/* Alternar Câmera */}
-          <button
-            type="button"
-            onClick={alternarCamera}
-            className="h-9 px-3.5 rounded-full bg-card border border-border text-xs font-bold text-text-muted hover:text-text-main flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>{cameraTraseira ? "Traseira" : "Frontal"}</span>
+            <span>Focar Agora</span>
           </button>
         </div>
       )}
 
       {/* Alerta de erro da foto */}
       {erroFoto && (
-        <div className="bg-budget-red-bg text-budget-red-text px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 max-w-sm w-full">
+        <div className="bg-budget-red-bg text-budget-red-text px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 max-w-md w-full">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{erroFoto}</span>
         </div>
       )}
 
-      {/* Botões de Ação para Fotos Nítidas (Solução definitiva para problemas de foco) */}
-      <div className="w-full max-w-sm flex flex-col gap-2 pt-1">
+      {/* Botões de Ação para Fotos Nítidas */}
+      <div className="w-full max-w-md flex flex-col gap-2 pt-1">
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
           className="w-full h-12 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
         >
           <Camera className="w-4 h-4" />
-          <span>Tirar foto com o app da câmera (Foco Nítido)</span>
+          <span>Tirar foto com o app da câmera (Foco Nítido Garantido)</span>
         </button>
 
         <button
@@ -468,7 +561,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
         {/* Dica simples de leitura */}
         <p className="text-[11px] text-text-muted text-center px-2">
-          💡 <strong>Dica:</strong> Toque no quadrado do QR Code na tela para a lente ajustar o foco, ou use o <strong>2x Zoom</strong> mantendo o celular a 20cm.
+          💡 Se a imagem estiver embaçada, selecione a <strong>Lente Principal 1x</strong> no topo, ou use o botão de tirar foto pelo app da câmera.
         </p>
       </div>
 
