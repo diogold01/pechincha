@@ -7,8 +7,8 @@ import {
   RefreshCw,
   ZoomIn,
   Image as ImageIcon,
-  Sparkles,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 
 interface QrCodeScannerProps {
@@ -23,6 +23,13 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
   const [zoomAtual, setZoomAtual] = useState<number>(1);
   const [lendoFoto, setLendoFoto] = useState(false);
   const [erroFoto, setErroFoto] = useState<string | null>(null);
+
+  // Estado do Toque para Focar (Tap-to-Focus)
+  const [pontoFoco, setPontoFoco] = useState<{ x: number; y: number; ativo: boolean }>({
+    x: 0,
+    y: 0,
+    ativo: false,
+  });
 
   const scannerRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -139,6 +146,104 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
     }
   }
 
+  // Toque na tela para focar a câmera no ponto tocado (Tap-to-Focus)
+  async function handleToqueFocar(
+    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>
+  ) {
+    if (!iniciado || erroCamera) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const touch =
+      "touches" in e
+        ? e.touches[0] || (e as React.TouchEvent).changedTouches[0]
+        : (e as React.MouseEvent);
+
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    setPontoFoco({ x, y, ativo: true });
+
+    try {
+      const video = document.querySelector(
+        `#${elementId} video`
+      ) as HTMLVideoElement | null;
+      const stream = video?.srcObject as MediaStream | null;
+      const track = stream?.getVideoTracks()[0];
+
+      if (track) {
+        const caps = (track.getCapabilities?.() || {}) as any;
+        const settings = track.getSettings?.() || {};
+
+        const sensorX = Math.round((x / rect.width) * (settings.width || 1280));
+        const sensorY = Math.round((y / rect.height) * (settings.height || 720));
+
+        // Tenta passar o ponto de interesse para medição do foco
+        if ("pointsOfInterest" in caps) {
+          try {
+            await track.applyConstraints({
+              advanced: [{ pointsOfInterest: { x: sensorX, y: sensorY } } as any],
+            });
+          } catch {}
+        }
+
+        // Aciona o motor de foco (single-shot) para focar imediatamente no local
+        try {
+          await track.applyConstraints({
+            advanced: [{ focusMode: "single-shot" } as any],
+          });
+        } catch {}
+
+        // Restaura para contínuo para manter o foco estável
+        setTimeout(async () => {
+          try {
+            await track.applyConstraints({
+              advanced: [{ focusMode: "continuous" } as any],
+            });
+          } catch {}
+        }, 800);
+      } else if (scannerRef.current) {
+        await scannerRef.current.applyVideoConstraints({
+          advanced: [{ focusMode: "single-shot" } as any],
+        });
+      }
+    } catch {
+      // Ignora silenciosamente se o hardware não responder
+    } finally {
+      setTimeout(() => {
+        setPontoFoco((prev) => ({ ...prev, ativo: false }));
+      }, 1200);
+    }
+  }
+
+  // Focar no centro da mira via botão
+  function focarCentro() {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = rect.width / 2;
+    const y = rect.height / 2;
+
+    setPontoFoco({ x, y, ativo: true });
+
+    const video = document.querySelector(`#${elementId} video`) as HTMLVideoElement | null;
+    const stream = video?.srcObject as MediaStream | null;
+    const track = stream?.getVideoTracks()[0];
+
+    if (track) {
+      track
+        .applyConstraints({
+          advanced: [{ focusMode: "single-shot" } as any],
+        })
+        .catch(() => {})
+        .finally(() => {
+          setTimeout(() => {
+            track.applyConstraints({ advanced: [{ focusMode: "continuous" } as any] }).catch(() => {});
+            setPontoFoco((prev) => ({ ...prev, ativo: false }));
+          }, 800);
+        });
+    }
+  }
+
   // Leitura de foto capturada pelo aplicativo nativo de câmera ou galeria
   async function handleFotoArquivo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -158,10 +263,14 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
       if (decodedText && decodedText.trim().length > 0) {
         onScan(decodedText.trim());
       } else {
-        setErroFoto("Não conseguimos ler o QR Code nesta foto. Tente tirar mais perto ou com mais iluminação.");
+        setErroFoto(
+          "Não conseguimos ler o QR Code nesta foto. Tente tirar mais perto ou com mais iluminação."
+        );
       }
     } catch {
-      setErroFoto("QR Code não identificado na imagem. Aproxime a foto do quadradinho preto e branco.");
+      setErroFoto(
+        "QR Code não identificado na imagem. Aproxime a foto do quadradinho preto e branco."
+      );
     } finally {
       setLendoFoto(false);
       e.target.value = "";
@@ -170,8 +279,19 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
-      {/* Container visual da câmera */}
-      <div className="relative w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden border-2 border-border shadow-inner flex items-center justify-center">
+      {/* Dica de toque para focar */}
+      {iniciado && !erroCamera && (
+        <p className="text-[11px] font-bold text-primary flex items-center gap-1.5 animate-pulse">
+          <span>👆 Toque na imagem para focar a câmera no papel</span>
+        </p>
+      )}
+
+      {/* Container visual da câmera com suporte a clique/toque para focar */}
+      <div
+        onClick={handleToqueFocar}
+        className="relative w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden border-2 border-border shadow-inner flex items-center justify-center cursor-pointer select-none"
+        title="Toque para focar a câmera"
+      >
         <div id={elementId} className="w-full h-full object-cover" />
 
         {/* Guia de mira visual quando a câmera estiver ativa */}
@@ -186,7 +306,29 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
           </div>
         )}
 
-        {/* Mensagem de Erro de Câmera */}
+        {/* Retículo de Foco ao Tocar na Tela (Tap-to-Focus) */}
+        {pontoFoco.ativo && (
+          <div
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center transition-all duration-200"
+            style={{ left: pontoFoco.x, top: pontoFoco.y }}
+          >
+            {/* Onda expansiva */}
+            <div className="w-20 h-20 border-2 border-primary/50 rounded-2xl animate-ping absolute" />
+            {/* Caixa de mira com cantos */}
+            <div className="w-16 h-16 border-2 border-white rounded-xl relative shadow-xl flex items-center justify-center bg-primary/20 backdrop-blur-2xs">
+              <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+              <div className="absolute -top-0.5 -left-0.5 w-3 h-3 border-t-2 border-l-2 border-primary" />
+              <div className="absolute -top-0.5 -right-0.5 w-3 h-3 border-t-2 border-r-2 border-primary" />
+              <div className="absolute -bottom-0.5 -left-0.5 w-3 h-3 border-b-2 border-l-2 border-primary" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 border-b-2 border-r-2 border-primary" />
+            </div>
+            <span className="absolute -bottom-5 text-[10px] font-extrabold text-white bg-black/70 px-2 py-0.5 rounded-full shadow-md whitespace-nowrap">
+              Focando...
+            </span>
+          </div>
+        )}
+
+        {/* Mensagem de Erro de Câmera com Botão de Permissão */}
         {erroCamera && (
           <div className="absolute inset-0 bg-background/95 p-6 flex flex-col items-center justify-center text-center gap-2.5 z-10">
             <CameraOff className="w-9 h-9 text-budget-red" />
@@ -201,7 +343,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
                   const stream = await navigator.mediaDevices?.getUserMedia({ video: true });
                   stream?.getTracks().forEach((t) => t.stop());
                 } catch {}
-                setCameraTraseira((prev) => prev); // reinicia
+                setCameraTraseira((prev) => prev);
               }}
               className="mt-1 h-9 px-4 rounded-xl bg-primary text-white text-xs font-bold shadow-xs hover:bg-primary-hover transition-all cursor-pointer flex items-center gap-1.5"
             >
@@ -256,6 +398,18 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
             </button>
           </div>
 
+          {/* Botão de Refocar */}
+          <button
+            type="button"
+            onClick={focarCentro}
+            className="h-9 px-3 rounded-full bg-card border border-border text-xs font-bold text-text-muted hover:text-text-main flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            title="Refocar a câmera"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            <span>Focar</span>
+          </button>
+
+          {/* Alternar Câmera */}
           <button
             type="button"
             onClick={alternarCamera}
@@ -314,7 +468,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
         {/* Dica simples de leitura */}
         <p className="text-[11px] text-text-muted text-center px-2">
-          💡 <strong>Dica:</strong> Para papel térmico, mantenha o celular a cerca de 20cm com boa iluminação ou toque no botão de <strong>2x Zoom</strong>.
+          💡 <strong>Dica:</strong> Toque no quadrado do QR Code na tela para a lente ajustar o foco, ou use o <strong>2x Zoom</strong> mantendo o celular a 20cm.
         </p>
       </div>
 
