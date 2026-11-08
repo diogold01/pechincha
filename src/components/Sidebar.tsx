@@ -13,6 +13,7 @@ import {
   Download,
   Store,
   Sparkles,
+  QrCode,
 } from "lucide-react";
 
 export const ITENS_MENU_PRINCIPAL = [
@@ -24,6 +25,7 @@ export const ITENS_MENU_PRINCIPAL = [
 ];
 
 export const ITENS_MENU_SECUNDARIO = [
+  { href: "/mais/cupom", label: "Importar cupom fiscal", icon: QrCode },
   { href: "/historico", label: "Histórico de compras", icon: History },
   { href: "/exportar", label: "Exportar dados (CSV)", icon: Download },
 ];

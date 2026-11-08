@@ -27,6 +27,7 @@ Deploy em produção: [pechincha-two.vercel.app](https://pechincha-two.vercel.ap
 - **Histórico de Preços e Estimativas:** Registro automático de preços por estabelecimento, marca e data, com projeção do custo da compra antes de ir ao mercado (baseada em média móvel de 3 meses, último preço ou menor valor histórico).
 - **Variações de Itens:** Suporte ao agrupamento de quantidades ou separação em linhas distintas para registrar marcas, sabores e valores diferentes de um mesmo produto.
 - **Controle Orçamentário:** Definição de limites mensais globais e por setor (hortifrúti, açougue, limpeza, etc.), com sinalização visual de aproximação (80%) e estouro de teto.
+- **Importação Inteligente de Cupom Fiscal:** Leitura de QR Code pela câmera, upload de arquivo PDF (Danfe/NFC-e) e consulta a links da SEFAZ, com motor de matching que compara itens com o catálogo existente, identifica marcas e gera carrinhos prontos para conferência.
 - **Resiliência Offline:** Fila local via `localStorage` com remapeamento de IDs temporários para reconciliação automática de dados em locais sem sinal 4G/Wi-Fi.
 - **Acesso para Avaliação (Modo Visitante):** Autenticação em um clique com ambiente isolado para testes rápidos da interface.
 - **Exportação e Backup:** Extração dos dados em CSV e rotina completa de backup/restauração em JSON.
