@@ -24,7 +24,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
 import QrCodeScanner from "@/components/QrCodeScanner";
-import { formatarMoeda } from "@/lib/format";
+import { formatarMoeda, parseDecimalBR } from "@/lib/format";
 import type { DadosCupomFiscal, ItemCupomFiscal } from "@/lib/cupom-parser";
 import {
   correlacionarItensCupom,
@@ -283,22 +283,37 @@ export default function ImportarCupomPage() {
     );
   }
 
-  function atualizarPrecoUnitario(index: number, novoPrecoStr: string) {
-    const limpo = novoPrecoStr.replace(/\./g, "").replace(",", ".");
-    const novoPreco = parseFloat(limpo) || 0;
+  function atualizarPrecoUnitario(index: number, valorDigitado: string) {
+    // Permite apenas números, vírgula e ponto (evita caracteres inválidos)
+    const textoLimpo = valorDigitado.replace(/[^0-9.,]/g, "");
+    const precoNum = parseDecimalBR(textoLimpo);
 
     setItensRevisao((prev) =>
       prev.map((item, idx) => {
         if (idx !== index) return item;
         const qtd = item.itemCupom.quantidade || 1;
-        const novoTotal = Number((novoPreco * qtd).toFixed(2));
+        const novoTotal = Number((precoNum * qtd).toFixed(2));
         return {
           ...item,
+          precoDigitadoTexto: textoLimpo,
           itemCupom: {
             ...item.itemCupom,
-            valor_unitario: novoPreco,
+            valor_unitario: precoNum,
             valor_total: novoTotal,
           },
+        };
+      })
+    );
+  }
+
+  function normalizarPrecoUnitarioAoSair(index: number) {
+    setItensRevisao((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const num = item.itemCupom.valor_unitario;
+        return {
+          ...item,
+          precoDigitadoTexto: num > 0 ? num.toFixed(2).replace(".", ",") : "",
         };
       })
     );
@@ -912,11 +927,18 @@ export default function ImportarCupomPage() {
                               <div className="relative flex items-center">
                                 <span className="absolute left-2.5 text-xs font-bold text-text-muted">R$</span>
                                 <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={rev.itemCupom.valor_unitario ?? ""}
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={
+                                    rev.precoDigitadoTexto !== undefined
+                                      ? rev.precoDigitadoTexto
+                                      : rev.itemCupom.valor_unitario > 0
+                                      ? rev.itemCupom.valor_unitario.toFixed(2).replace(".", ",")
+                                      : ""
+                                  }
                                   onChange={(e) => atualizarPrecoUnitario(index, e.target.value)}
+                                  onBlur={() => normalizarPrecoUnitarioAoSair(index)}
+                                  placeholder="0,00"
                                   className="w-24 h-8 pl-8 pr-2 rounded-lg bg-card border border-border text-xs font-extrabold text-text-main focus:outline-none focus:border-primary"
                                 />
                               </div>
