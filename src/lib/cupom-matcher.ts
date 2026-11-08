@@ -11,6 +11,7 @@ export interface SugestaoMatchProduto {
   produtoSugerido: Product | null;
   scoreSimilaridade: number; // 0 a 100
   ehMesmoProduto: boolean;
+  ehAtacado: boolean;
   marcaConfirmada: string;
   setorSugeridoId?: string | null;
   nomeFormatadoNovo: string;
@@ -189,6 +190,7 @@ export function correlacionarItensCupom(
       produtoSugerido: ehMesmo ? melhorProduto : null,
       scoreSimilaridade: maiorScore,
       ehMesmoProduto: ehMesmo,
+      ehAtacado: Boolean(item.eh_atacado),
       marcaConfirmada: item.marca_extraida || "",
       setorSugeridoId: ehMesmo && melhorProduto ? melhorProduto.sector_id : (setor?.id || null),
       nomeFormatadoNovo: formatarNomeParaCadastro(item.descricao),

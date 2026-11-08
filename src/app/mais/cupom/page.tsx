@@ -283,6 +283,35 @@ export default function ImportarCupomPage() {
     );
   }
 
+  function atualizarPrecoUnitario(index: number, novoPrecoStr: string) {
+    const limpo = novoPrecoStr.replace(/\./g, "").replace(",", ".");
+    const novoPreco = parseFloat(limpo) || 0;
+
+    setItensRevisao((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const qtd = item.itemCupom.quantidade || 1;
+        const novoTotal = Number((novoPreco * qtd).toFixed(2));
+        return {
+          ...item,
+          itemCupom: {
+            ...item.itemCupom,
+            valor_unitario: novoPreco,
+            valor_total: novoTotal,
+          },
+        };
+      })
+    );
+  }
+
+  function alternarAtacado(index: number) {
+    setItensRevisao((prev) =>
+      prev.map((item, idx) =>
+        idx === index ? { ...item, ehAtacado: !item.ehAtacado } : item
+      )
+    );
+  }
+
   // Geração do Carrinho no Banco (Etapa 4)
   async function handleGerarCarrinhoFinal() {
     if (!groupId) return;
@@ -385,7 +414,7 @@ export default function ImportarCupomPage() {
               preco: itemRev.itemCupom.valor_unitario,
               marca: itemRev.marcaConfirmada.trim() || null,
               unidade: itemRev.itemCupom.unidade || "un",
-              tipo: "varejo",
+              tipo: itemRev.ehAtacado ? "atacado" : "varejo",
               origem: "manual",
             });
           }
@@ -647,6 +676,28 @@ export default function ImportarCupomPage() {
               )}
             </div>
 
+            {/* Banner de Desconto na Nota (se houver desconto identificado na SEFAZ ou cupom) */}
+            {dadosCupom?.total_descontos && dadosCupom.total_descontos > 0 && (
+              <div className="bg-primary-light border border-primary/20 rounded-2xl p-4 flex items-start gap-3 shadow-xs">
+                <div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <Tag className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs font-bold text-text-main">
+                      Desconto de {formatarMoeda(dadosCupom.total_descontos)} identificado nesta compra!
+                    </h4>
+                    <span className="text-[10px] font-extrabold bg-primary text-white px-2 py-0.5 rounded-full">
+                      Atacado / Desconto
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-muted mt-1 leading-relaxed">
+                    A SEFAZ disponibiliza a lista de produtos com o valor cheio/bruto. Você pode ajustar o preço unitário e marcar <strong>Preço de Atacado</strong> nos itens que receberam desconto abaixo antes de salvar.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Seletor do Mercado no Pechincha */}
             <div className="bg-card border border-border rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
               <div>
@@ -703,18 +754,39 @@ export default function ImportarCupomPage() {
                     {/* Linha 1: Item da Nota Fiscal vs. Preço e Quantidade */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <span className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
-                          No Cupom
-                        </span>
-                        <h3 className="text-sm font-extrabold text-text-main leading-snug">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] font-bold tracking-wider text-text-muted uppercase">
+                            No Cupom
+                          </span>
+                          {rev.ehAtacado && (
+                            <span className="text-[10px] font-black bg-primary-light text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <Tag className="w-2.5 h-2.5" />
+                              <span>Atacado</span>
+                            </span>
+                          )}
+                          {rev.itemCupom.desconto && rev.itemCupom.desconto > 0 && (
+                            <span className="text-[10px] font-bold bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
+                              -{formatarMoeda(rev.itemCupom.desconto)} desc.
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-extrabold text-text-main leading-snug mt-0.5">
                           {rev.itemCupom.descricao}
                         </h3>
-                        <p className="text-xs text-text-muted font-medium mt-0.5">
-                          {rev.itemCupom.quantidade} {rev.itemCupom.unidade} ×{" "}
-                          {formatarMoeda(rev.itemCupom.valor_unitario)} ={" "}
+                        <p className="text-xs text-text-muted font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          <span>
+                            {rev.itemCupom.quantidade} {rev.itemCupom.unidade} ×{" "}
+                            {formatarMoeda(rev.itemCupom.valor_unitario)}
+                          </span>
+                          <span>=</span>
                           <span className="font-bold text-text-main">
                             {formatarMoeda(rev.itemCupom.valor_total)}
                           </span>
+                          {rev.itemCupom.valor_original && rev.itemCupom.valor_original > rev.itemCupom.valor_total && (
+                            <span className="line-through text-text-muted/60 text-[11px]">
+                              {formatarMoeda(rev.itemCupom.valor_original)}
+                            </span>
+                          )}
                         </p>
                       </div>
 
@@ -830,6 +902,52 @@ export default function ImportarCupomPage() {
                               </select>
                             </div>
                           )}
+
+                          {/* Edição de Preço Unitário e Tipo de Preço (Atacado / Varejo) */}
+                          <div className="sm:col-span-12 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-border/70">
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] font-bold text-text-muted whitespace-nowrap">
+                                Preço unitário:
+                              </label>
+                              <div className="relative flex items-center">
+                                <span className="absolute left-2.5 text-xs font-bold text-text-muted">R$</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={rev.itemCupom.valor_unitario ?? ""}
+                                  onChange={(e) => atualizarPrecoUnitario(index, e.target.value)}
+                                  className="w-24 h-8 pl-8 pr-2 rounded-lg bg-card border border-border text-xs font-extrabold text-text-main focus:outline-none focus:border-primary"
+                                />
+                              </div>
+                              <span className="text-xs font-bold text-text-muted">
+                                / {rev.itemCupom.unidade}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between sm:justify-end gap-3">
+                              <span className="text-xs font-medium text-text-muted">
+                                Subtotal:{" "}
+                                <strong className="text-text-main font-bold">
+                                  {formatarMoeda(rev.itemCupom.valor_total)}
+                                </strong>
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() => alternarAtacado(index)}
+                                className={`h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                  rev.ehAtacado
+                                    ? "bg-primary text-white shadow-2xs"
+                                    : "bg-card border border-border text-text-muted hover:text-text-main"
+                                }`}
+                                title="Define se este valor será salvo no Pechincha como Preço de Atacado ou Preço de Varejo"
+                              >
+                                <Tag className="w-3 h-3" />
+                                <span>{rev.ehAtacado ? "🏷️ Preço Atacado" : "Preço Varejo"}</span>
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
