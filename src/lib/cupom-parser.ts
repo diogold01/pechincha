@@ -219,36 +219,126 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
     totalCupom = parseNumeroBR(totalMatch[1]);
   }
 
-  const linhas = textoBruto.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  const linhas = textoBruto
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
 
-  // Se a primeira linha tiver cara de nome comercial e não for cabeçalho
-  if (linhas.length > 0 && !linhas[0].toLowerCase().includes("danfe") && !linhas[0].toLowerCase().includes("cnpj")) {
-    mercadoNome = linhas[0];
+  // Busca Nome do Mercado / Razão Social / Nome Fantasia
+  const razaoSocialMatch = textoBruto.match(/(?:Raz[aã]o\s+Social|Nome\s+Fantasia|Emitente)[:\s]+([^\n\r]+)/i);
+  if (razaoSocialMatch) {
+    mercadoNome = razaoSocialMatch[1].trim();
+  } else {
+    for (const l of linhas.slice(0, 8)) {
+      const lLower = l.toLowerCase();
+      if (
+        !lLower.includes("governo") &&
+        !lLower.includes("secretaria") &&
+        !lLower.includes("sefaz") &&
+        !lLower.includes("danfe") &&
+        !lLower.includes("nfc-e") &&
+        !lLower.includes("sat") &&
+        !lLower.includes("consulta") &&
+        !lLower.includes("cnpj") &&
+        !lLower.includes("documento auxiliar") &&
+        !lLower.includes("via consumidor") &&
+        l.length > 3
+      ) {
+        mercadoNome = l;
+        break;
+      }
+    }
   }
 
-  // Regex para linha de produto de cupom fiscal:
-  // Ex: "001 7891000100100 ARROZ TIO JOAO 5KG 2 UN X 24,90 49,80"
-  // Ou: "ARROZ TIO JOAO 5KG 1 UN 24,90"
-  // Ou: "LEITE CONDENSADO 395G ... 4,89"
+  // Percorre as linhas identificando produtos
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i];
 
-    // Ignora linhas de rodapé, totais e impostos
+    // Ignora cabeçalhos, rodapé, totais e impostos
     if (
-      /^(TOTAL|VALOR|PAGAMENTO|CARTAO|DINHEIRO|TROCO|CHAVE DE ACESSO|PROTOCOLO|EMISSAO|TRIBUTOS|ICMS|PROCON)/i.test(linha)
+      /^(TOTAL|VALOR A PAGAR|FORMA DE PAGAMENTO|CARTAO|CARTÃO|DINHEIRO|TROCO|CHAVE DE ACESSO|PROTOCOLO|EMISSAO|EMISSÃO|TRIBUTOS|ICMS|PROCON|CONSULTE PELA|DOCUMENTO AUXILIAR|NFC-E|GOVERNO|SECRETARIA)/i.test(
+        linha
+      )
     ) {
       continue;
     }
 
-    // Tenta casar linha com valores no final: "DESCRIÇÃO ... QTD UN ... VL_UNIT VL_TOTAL"
-    // Padrão 1: linha com números decimais no final (ex: "ARROZ 5KG 1 UN 24,90 24,90" ou "ARROZ 5KG 24,90")
-    const matchValores = linha.match(/^(.*?)\s+([0-9]+[.,]?[0-9]*)\s*([A-Za-z]{2,3})\s*(?:X|\*|\/)?\s*([0-9]+[.,][0-9]{2})\s+([0-9]+[.,][0-9]{2})$/i) ||
-                         linha.match(/^(.*?)\s+([0-9]+[.,][0-9]{2})\s*$/);
+    // Padrão A: Linha com tabela em pipes (|)
+    if (linha.includes("|")) {
+      const cols = linha.split("|").map((c) => c.trim()).filter((c) => c.length > 0);
+      if (cols.length >= 3) {
+        const ultCol = parseNumeroBR(cols[cols.length - 1]);
+        const penultCol = parseNumeroBR(cols[cols.length - 2]);
+        if (ultCol > 0) {
+          const desc = cols.find((c) => c.length > 2 && !/^[0-9.,]+$/.test(c)) || cols[0];
+          const un = cols.find((c) => /^(UN|KG|G|L|ML|PCT|CX|LT)$/i.test(c)) || "un";
+          const vlUnit = penultCol > 0 ? penultCol : ultCol;
+
+          itens.push({
+            id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            descricao: desc.replace(/^\d+[\s\.\-]+/, "").trim(),
+            quantidade: 1,
+            unidade: normalizarUnidade(un),
+            valor_unitario: vlUnit,
+            valor_total: ultCol,
+            marca_extraida: extrairMarcaDoTexto(desc),
+            descartar: /sacola/i.test(desc),
+          });
+          continue;
+        }
+      }
+    }
+
+    // Padrão B: Multi-linha de NFC-e
+    // Linha atual = Descrição do produto (ex: "ARROZ TIO JOAO 5KG" ou "001 ARROZ TIO JOAO 5KG")
+    // Linha seguinte = "Qtde.: 1 UN: UN Vl. Unit.: 24,90 Vl. Total: 24,90" ou "1 UN X 24,90 24,90"
+    if (i + 1 < linhas.length) {
+      const proxLinha = linhas[i + 1];
+      const matchQtdVl =
+        proxLinha.match(/(?:Qtde?\.?|Qtd|Quantidade)?[:\s]*([0-9]+[.,]?[0-9]*)\s*(?:UN|Unidade)?[:.\s]*([A-Za-z]{2,3})?\s*(?:X|\*|Vl\.?\s*Unit\.?[:\s]*)?\s*([0-9]+[.,][0-9]{2})\s*(?:Vl\.?\s*Total\.?[:\s]*)?\s*([0-9]+[.,][0-9]{2})$/i) ||
+        proxLinha.match(/^([0-9]+[.,]?[0-9]*)\s*([A-Za-z]{2,3})\s*(?:X|\*)\s*([0-9]+[.,][0-9]{2})\s+([0-9]+[.,][0-9]{2})$/i);
+
+      if (
+        matchQtdVl &&
+        !linha.includes("TOTAL") &&
+        !linha.includes("VALOR") &&
+        !linha.includes("PAGAMENTO") &&
+        !linha.includes("CHAVE")
+      ) {
+        const desc = linha.replace(/^\d+[\s\.\-]+/, "").trim();
+        const qtd = parseNumeroBR(matchQtdVl[1]) || 1;
+        const un = normalizarUnidade(matchQtdVl[2] || "un");
+        const vlUnit = parseNumeroBR(matchQtdVl[3]);
+        const vlTotal = parseNumeroBR(matchQtdVl[4]);
+
+        if (desc.length > 2 && vlUnit > 0) {
+          itens.push({
+            id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            descricao: desc,
+            quantidade: qtd,
+            unidade: un,
+            valor_unitario: vlUnit,
+            valor_total: vlTotal,
+            marca_extraida: extrairMarcaDoTexto(desc),
+            descartar: /sacola/i.test(desc),
+          });
+          i++; // Avança a linha consumida
+          continue;
+        }
+      }
+    }
+
+    // Padrão C: Linha única completa com valores no final
+    // Ex: "001 7891000100100 ARROZ TIO JOAO 5KG 2 UN X 24,90 49,80"
+    // Ou: "ARROZ TIO JOAO 5KG 1 UN 24,90"
+    // Ou: "LEITE CONDENSADO 395G ... 4,89"
+    const matchValores =
+      linha.match(/^(.*?)\s+([0-9]+[.,]?[0-9]*)\s*([A-Za-z]{2,3})\s*(?:X|\*|\/)?\s*([0-9]+[.,][0-9]{2})\s+([0-9]+[.,][0-9]{2})$/i) ||
+      linha.match(/^(.*?)\s+([0-9]+[.,][0-9]{2})\s*$/);
 
     if (matchValores) {
       if (matchValores.length === 6) {
-        // Linha completa: Descrição, Qtd, Unidade, VlUnit, VlTotal
-        const desc = matchValores[1].replace(/^\d+\s+/, "").trim();
+        const desc = matchValores[1].replace(/^\d+[\s\.\-]+/, "").trim();
         const qtd = parseNumeroBR(matchValores[2]) || 1;
         const un = normalizarUnidade(matchValores[3]);
         const vlUnit = parseNumeroBR(matchValores[4]);
@@ -267,8 +357,7 @@ export function parseCupomTexto(textoBruto: string): DadosCupomFiscal {
           });
         }
       } else if (matchValores.length === 3) {
-        // Linha simples: Descrição e Preço final
-        const desc = matchValores[1].replace(/^\d+\s+/, "").trim();
+        const desc = matchValores[1].replace(/^\d+[\s\.\-]+/, "").trim();
         const vlTotal = parseNumeroBR(matchValores[2]);
 
         if (desc.length > 2 && vlTotal > 0) {

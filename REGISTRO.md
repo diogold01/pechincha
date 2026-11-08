@@ -192,6 +192,13 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Motor de Comparação e Semelhança ([src/lib/cupom-matcher.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-matcher.ts)):** Algoritmo inteligente que cruza o nome do item da nota com o catálogo do usuário via Levenshtein e Jaccard similarity, sugere o setor correto por palavras-chave e identifica marcas populares.
 - **Tabela Comparativa e Conversão em Carrinho:** Interface responsiva que permite ao usuário escolher entre "É o mesmo" (atualizando o preço de histórico) ou "Cadastrar como novo" com nome limpo e setor sugerido. Gera automaticamente o carrinho ativo pronto para compra ao vivo ou finalização no histórico.
 
+---
+
+## Correção de Foco na Câmera e Leitor de PDF na Nuvem (Vercel)
+- **Autofoco e Zoom na Câmera ([src/components/QrCodeScanner.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/QrCodeScanner.tsx)):** Adicionado foco contínuo (`focusMode: continuous`) no sensor da câmera, botão rápido de "2x Zoom" para ler QR Codes de papel térmico sem precisar aproximar tanto o celular, e botão "Tirar foto com o app da câmera (Foco Nítido)" que usa a câmera nativa do celular (com lente macro e foco a laser) como alternativa garantida.
+- **Substituição da Biblioteca de PDF ([src/app/api/cupom/parse/route.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/api/cupom/parse/route.ts)):** Removido o pacote `pdf-parse` (que dependia de módulos binários C++ e quebrava nos servidores da Vercel retornando página de erro HTML em vez de dados) e implementado o `unpdf`, 100% puro em JavaScript e otimizado para nuvem.
+- **Leitura Aprimorada de Danfe / NFC-e ([src/lib/cupom-parser.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-parser.ts)):** Suporte para extrair itens com tabelas em múltiplas linhas e formatos estaduais (incluindo SEFAZ Mato Grosso do Sul), identificando razão social, produtos, quantidades e preços sem falhas.
+
 
 
 
