@@ -230,6 +230,13 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Rota segura de teste e análise ([src/app/api/cupom/ia/route.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/api/cupom/ia/route.ts)):** Criada a API que recebe a chave apenas na memória da requisição via cabeçalho HTTPS (`x-gemini-api-key`) para testar a chave na hora e analisar listas de produtos retornando nome limpo, marca e setor sugerido em JSON estruturado, traduzindo possíveis erros de chave ou limite de cota para mensagens simples em português.
 - **Tela "IA para Cupons" em Mais ([src/app/mais/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/page.tsx)):** Adicionado o cartão e o painel modal "Inteligência Artificial (Opcional)" com interruptor Ligar/Desligar, campo de senha com botão de visualizar/ocultar, link direto para gerar a chave gratuita no Google AI Studio, seletor de modelo e botões de **Testar chave**, **Remover** e **Salvar**.
 
+---
+
+## IA Opcional no Cupom — Etapa 2: Leitura Inteligente e Plano B com Histórico de Marcas
+- **Lista ampliada de marcas regionais e de atacadistas ([src/lib/cupom-parser.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-parser.ts)):** Atualizado o identificador local para reconhecer dezenas de novas marcas nacionais e regionais (como Marquespan, Veneza, Bello, Kinino, Kodilar, Donana, Vitália, Copacol, Lar, Frimesa e Predilecta), ignorando diferenças de acento na nota fiscal e aceitando marcas do histórico do grupo como prioridade.
+- **Comparação dupla e organização inteligente ([src/lib/cupom-matcher.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-matcher.ts)):** Atualizado o motor de comparação para combinar o nome limpo pela IA (ou formatado localmente sem marca e sem unidade repetida no final) com a descrição original da nota para não perder produtos já cadastrados, além de ampliar a detecção de setores (Hortifruti, Padaria, Laticínios, Açougue, Mercearia e demais).
+- **Integração completa na tela de cupom ([src/app/mais/cupom/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/cupom/page.tsx)):** Adicionado controle rápido antes da importação para ligar/desligar a IA ou ir configurar a chave em Mais, chamada automática ao Google AI Studio após ler QR Code/PDF/link, sugestões de marcas já usadas no histórico do grupo (`prices` e `cart_items`) e retorno automático e seguro para o Plano B local caso a IA esteja desligada ou apresente erro de cota.
+
 
 
 

@@ -20,16 +20,26 @@ import {
   Plus,
   RefreshCw,
   Check,
+  X,
+  Settings,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
 import QrCodeScanner from "@/components/QrCodeScanner";
 import { formatarMoeda, parseDecimalBR } from "@/lib/format";
-import type { DadosCupomFiscal, ItemCupomFiscal } from "@/lib/cupom-parser";
+import type { DadosCupomFiscal } from "@/lib/cupom-parser";
 import {
   correlacionarItensCupom,
+  type ResultadoIAItem,
   type SugestaoMatchProduto,
 } from "@/lib/cupom-matcher";
+import {
+  lerConfigIA,
+  MODELOS_IA_DISPONIVEIS,
+  salvarConfigIA,
+  temIAConfigurada,
+  type ConfigIA,
+} from "@/lib/ia-config";
 import type { Market, Product, Sector } from "@/lib/types";
 
 export default function ImportarCupomPage() {
@@ -40,10 +50,18 @@ export default function ImportarCupomPage() {
   const [produtos, setProdutos] = useState<Product[]>([]);
   const [setores, setSetores] = useState<Sector[]>([]);
   const [mercados, setMercados] = useState<Market[]>([]);
+  const [marcasHistorico, setMarcasHistorico] = useState<string[]>([]);
   const [carregandoDados, setCarregandoDados] = useState(true);
 
+  // Configuração local da IA opcional (Google AI Studio)
+  const [configIA, setConfigIA] = useState<ConfigIA>({
+    ativada: false,
+    apiKey: "",
+    modelo: "gemini-3.8-flash",
+  });
+
   // Estados do Fluxo de Importação
-  // 1: Entrada (Câmera / PDF / Link) | 2: Tabela Comparativa | 3: Criando Carrinho
+  // 1: Entrada (Câmera / PDF / Link) | 2: Tabela Comparativa
   const [passo, setPasso] = useState<1 | 2>(1);
   const [abaEntrada, setAbaEntrada] = useState<"camera" | "pdf" | "link">("camera");
 
@@ -52,7 +70,10 @@ export default function ImportarCupomPage() {
   const [textoManual, setTextoManual] = useState("");
   const [arquivoPdf, setArquivoPdf] = useState<File | null>(null);
   const [processando, setProcessando] = useState(false);
+  const [etapaProcessamento, setEtapaProcessamento] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [avisoIA, setAvisoIA] = useState<string | null>(null);
+  const [usouIA, setUsouIA] = useState(false);
 
   // Dados do Cupom e Matching
   const [dadosCupom, setDadosCupom] = useState<DadosCupomFiscal | null>(null);
@@ -61,7 +82,19 @@ export default function ImportarCupomPage() {
   const [novoMercadoNome, setNovoMercadoNome] = useState("");
   const [gerandoCarrinho, setGerandoCarrinho] = useState(false);
 
-  // Carrega produtos, setores e mercados do grupo
+  // Mantém preferência da IA sincronizada ao montar ou voltar da tela Mais
+  useEffect(() => {
+    const atualizarConfig = () => setConfigIA(lerConfigIA());
+    atualizarConfig();
+    window.addEventListener("focus", atualizarConfig);
+    window.addEventListener("storage", atualizarConfig);
+    return () => {
+      window.removeEventListener("focus", atualizarConfig);
+      window.removeEventListener("storage", atualizarConfig);
+    };
+  }, []);
+
+  // Carrega produtos, setores, mercados e marcas históricas do grupo
   useEffect(() => {
     async function carregarContexto() {
       try {
@@ -89,16 +122,45 @@ export default function ImportarCupomPage() {
         const gId = memberRows[0].group_id;
         setGroupId(gId);
 
-        const [{ data: prods }, { data: secs }, { data: mercs }] =
-          await Promise.all([
-            supabase.from("products").select("*").eq("group_id", gId),
-            supabase.from("sectors").select("*").eq("group_id", gId).order("ordem"),
-            supabase.from("markets").select("*").eq("group_id", gId),
-          ]);
+        const [
+          { data: prods },
+          { data: secs },
+          { data: mercs },
+          { data: marcasPrices },
+          { data: marcasCart },
+        ] = await Promise.all([
+          supabase.from("products").select("*").eq("group_id", gId),
+          supabase.from("sectors").select("*").eq("group_id", gId).order("ordem"),
+          supabase.from("markets").select("*").eq("group_id", gId),
+          supabase
+            .from("prices")
+            .select("marca")
+            .eq("group_id", gId)
+            .not("marca", "is", null)
+            .limit(500),
+          supabase
+            .from("cart_items")
+            .select("marca")
+            .eq("group_id", gId)
+            .not("marca", "is", null)
+            .limit(500),
+        ]);
 
         setProdutos(prods || []);
         setSetores(secs || []);
         setMercados(mercs || []);
+
+        const mapaMarcas = new Map<string, string>();
+        for (const reg of [...(marcasPrices || []), ...(marcasCart || [])]) {
+          const m = typeof reg.marca === "string" ? reg.marca.trim() : "";
+          if (m.length >= 2) {
+            const chave = m.toLowerCase();
+            if (!mapaMarcas.has(chave)) {
+              mapaMarcas.set(chave, m);
+            }
+          }
+        }
+        setMarcasHistorico(Array.from(mapaMarcas.values()));
       } catch {
         setErro("Erro ao carregar dados do grupo.");
       } finally {
@@ -109,17 +171,67 @@ export default function ImportarCupomPage() {
     carregarContexto();
   }, [router]);
 
-  // Processa a resposta do parser e avança para a tabela comparativa
-  function aplicarDadosCupom(dados: DadosCupomFiscal) {
+  function alternarIAAtivaRapido() {
+    if (!configIA.apiKey.trim()) return;
+    const atualizada = salvarConfigIA({ ativada: !configIA.ativada });
+    setConfigIA(atualizada);
+  }
+
+  // Processa a resposta do parser, consulta IA opcional e avança para a tabela comparativa
+  async function aplicarDadosCupom(dados: DadosCupomFiscal) {
     if (!dados.itens || dados.itens.length === 0) {
       setErro("Nenhum produto foi detectado neste cupom. Tente enviar o PDF ou colar o link.");
       return;
     }
 
-    setDadosCupom(dados);
+    const cfgAtual = lerConfigIA();
+    setConfigIA(cfgAtual);
 
-    // Roda o motor de comparação inteligente (Etapa 2)
-    const matches = correlacionarItensCupom(dados.itens, produtos, setores);
+    let analiseIA: ResultadoIAItem[] | undefined;
+    let mensagemAvisoIA: string | null = null;
+    let iaAplicada = false;
+
+    if (temIAConfigurada(cfgAtual)) {
+      setEtapaProcessamento("Organizando nomes, marcas e setores com IA...");
+      try {
+        const resIA = await fetch("/api/cupom/ia", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-gemini-api-key": cfgAtual.apiKey,
+          },
+          body: JSON.stringify({
+            acao: "analisar",
+            modelo: cfgAtual.modelo,
+            itens: dados.itens.map((it) => it.descricao),
+            setores: setores.map((s) => s.nome),
+          }),
+        });
+
+        const jsonIA = await resIA.json().catch(() => ({}));
+        if (resIA.ok && Array.isArray(jsonIA?.itens) && jsonIA.itens.length > 0) {
+          analiseIA = jsonIA.itens;
+          iaAplicada = true;
+        } else {
+          mensagemAvisoIA =
+            jsonIA?.erro ||
+            "A IA não respondeu desta vez. Seguimos com a identificação local.";
+        }
+      } catch {
+        mensagemAvisoIA =
+          "Não foi possível consultar a IA agora. Seguimos com a identificação local.";
+      }
+    }
+
+    setDadosCupom(dados);
+    setAvisoIA(mensagemAvisoIA);
+    setUsouIA(iaAplicada);
+
+    // Cruza com o catálogo usando IA (quando ativa) e Plano B local + marcas do histórico
+    const matches = correlacionarItensCupom(dados.itens, produtos, setores, {
+      marcasDoHistorico: marcasHistorico,
+      analiseIA,
+    });
     setItensRevisao(matches);
 
     // Tenta identificar o mercado
@@ -168,6 +280,7 @@ export default function ImportarCupomPage() {
   async function handleScanQrCode(textoDecodificado: string) {
     if (processando) return;
     setProcessando(true);
+    setEtapaProcessamento("Consultando cupom na SEFAZ...");
     setErro(null);
 
     try {
@@ -178,11 +291,12 @@ export default function ImportarCupomPage() {
       });
 
       const json = await interpretarRespostaApi(res);
-      aplicarDadosCupom(json.dados);
+      await aplicarDadosCupom(json.dados);
     } catch (err: any) {
       setErro(err.message || "Não foi possível consultar este cupom na SEFAZ.");
     } finally {
       setProcessando(false);
+      setEtapaProcessamento(null);
     }
   }
 
@@ -195,6 +309,7 @@ export default function ImportarCupomPage() {
     }
 
     setProcessando(true);
+    setEtapaProcessamento("Extraindo itens do PDF...");
     setErro(null);
 
     try {
@@ -207,11 +322,12 @@ export default function ImportarCupomPage() {
       });
 
       const json = await interpretarRespostaApi(res);
-      aplicarDadosCupom(json.dados);
+      await aplicarDadosCupom(json.dados);
     } catch (err: any) {
       setErro(err.message || "Erro ao ler o arquivo PDF.");
     } finally {
       setProcessando(false);
+      setEtapaProcessamento(null);
     }
   }
 
@@ -224,6 +340,7 @@ export default function ImportarCupomPage() {
     }
 
     setProcessando(true);
+    setEtapaProcessamento("Consultando dados do cupom...");
     setErro(null);
 
     try {
@@ -237,11 +354,12 @@ export default function ImportarCupomPage() {
       });
 
       const json = await interpretarRespostaApi(res);
-      aplicarDadosCupom(json.dados);
+      await aplicarDadosCupom(json.dados);
     } catch (err: any) {
       setErro(err.message || "Erro ao processar dados.");
     } finally {
       setProcessando(false);
+      setEtapaProcessamento(null);
     }
   }
 
@@ -519,6 +637,80 @@ export default function ImportarCupomPage() {
            ========================================================================= */}
         {passo === 1 && (
           <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col gap-5">
+            {/* Controle rápido da IA opcional */}
+            <div className="rounded-2xl border border-border bg-background/70 px-3.5 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    temIAConfigurada(configIA)
+                      ? "bg-primary text-white"
+                      : "bg-primary-light text-primary"
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-extrabold text-text-main">
+                      {temIAConfigurada(configIA)
+                        ? "IA Ativa"
+                        : configIA.apiKey.trim().length >= 15
+                        ? "IA Desligada"
+                        : "IA Opcional"}
+                    </span>
+                    {temIAConfigurada(configIA) && (
+                      <span className="text-[10px] font-bold bg-primary-light text-primary px-2 py-0.5 rounded-full truncate">
+                        {MODELOS_IA_DISPONIVEIS.find((m) => m.id === configIA.modelo)?.nome.replace(
+                          " (Recomendado)",
+                          ""
+                        ) || configIA.modelo}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-text-muted truncate">
+                    {temIAConfigurada(configIA)
+                      ? "Limpa nomes, extrai marcas e sugere setores na leitura."
+                      : configIA.apiKey.trim().length >= 15
+                      ? "Chave salva. Ligue se quiser limpar nomes e marcas agora."
+                      : "Use uma chave gratuita do Google AI Studio em Mais."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {configIA.apiKey.trim().length >= 15 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={alternarIAAtivaRapido}
+                      className={`h-9 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        configIA.ativada
+                          ? "bg-card border border-border text-text-main hover:border-primary"
+                          : "bg-primary text-white hover:bg-primary-hover"
+                      }`}
+                    >
+                      {configIA.ativada ? "Desligar" : "Ligar IA"}
+                    </button>
+                    <Link
+                      href="/mais"
+                      title="Configurações da IA em Mais"
+                      className="w-9 h-9 rounded-xl bg-card border border-border text-text-muted hover:text-text-main flex items-center justify-center transition-colors"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </Link>
+                  </>
+                ) : (
+                  <Link
+                    href="/mais"
+                    className="h-9 px-3 rounded-xl bg-primary-light text-primary text-xs font-bold flex items-center gap-1 hover:opacity-90 transition-opacity"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>Configurar</span>
+                  </Link>
+                )}
+              </div>
+            </div>
+
             {/* Seletor de Método de Importação */}
             <div className="grid grid-cols-3 bg-background p-1 rounded-2xl border border-border">
               <button
@@ -579,14 +771,14 @@ export default function ImportarCupomPage() {
                 </p>
 
                 <QrCodeScanner
-                  ativo={abaEntrada === "camera" && passo === 1 && !processando}
+                  ativo={abaEntrada === "camera" && passo === 1 && !processando && !carregandoDados}
                   onScan={handleScanQrCode}
                 />
 
                 {processando && (
                   <div className="flex items-center gap-2 text-xs font-bold text-primary animate-pulse">
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Consultando cupom na SEFAZ...</span>
+                    <span>{etapaProcessamento || "Consultando cupom na SEFAZ..."}</span>
                   </div>
                 )}
               </div>
@@ -624,13 +816,13 @@ export default function ImportarCupomPage() {
 
                 <button
                   type="submit"
-                  disabled={!arquivoPdf || processando}
+                  disabled={!arquivoPdf || processando || carregandoDados}
                   className="h-12 rounded-2xl bg-primary text-white font-extrabold text-sm hover:bg-primary-hover disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
                 >
                   {processando ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Extraindo itens do PDF...</span>
+                      <span>{etapaProcessamento || "Extraindo itens do PDF..."}</span>
                     </>
                   ) : (
                     <>
@@ -673,13 +865,13 @@ export default function ImportarCupomPage() {
 
                 <button
                   type="submit"
-                  disabled={(!urlCupom.trim() && !textoManual.trim()) || processando}
+                  disabled={(!urlCupom.trim() && !textoManual.trim()) || processando || carregandoDados}
                   className="h-12 rounded-2xl bg-primary text-white font-extrabold text-sm hover:bg-primary-hover disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
                 >
                   {processando ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Consultando dados...</span>
+                      <span>{etapaProcessamento || "Consultando dados..."}</span>
                     </>
                   ) : (
                     <>
@@ -698,6 +890,29 @@ export default function ImportarCupomPage() {
            ========================================================================= */}
         {passo === 2 && (
           <div className="flex flex-col gap-5">
+            {/* Aviso caso a IA tenha falhado e usado o Plano B local */}
+            {avisoIA && (
+              <div className="bg-card border border-border rounded-2xl p-3.5 flex items-start justify-between gap-3 shadow-xs">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div className="text-xs text-text-muted leading-relaxed">
+                    <strong className="text-text-main">Plano B ativado:</strong> {avisoIA}{" "}
+                    <Link href="/mais" className="text-primary font-bold hover:underline">
+                      Ajustar IA
+                    </Link>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAvisoIA(null)}
+                  className="w-7 h-7 rounded-full hover:bg-background flex items-center justify-center text-text-muted cursor-pointer shrink-0"
+                  title="Fechar aviso"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Card com Metadados da Nota */}
             <div className="bg-card border border-border rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -771,10 +986,22 @@ export default function ImportarCupomPage() {
             </div>
 
             {/* Cabeçalho da Lista */}
-            <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-bold text-text-muted">
-                {itensRevisao.filter((i) => !i.itemCupom.descartar).length} itens no cupom para conferência
-              </span>
+            <div className="flex items-center justify-between gap-2 flex-wrap px-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-text-muted">
+                  {itensRevisao.filter((i) => !i.itemCupom.descartar).length} itens no cupom para conferência
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    usouIA
+                      ? "bg-primary-light text-primary"
+                      : "bg-card border border-border text-text-muted"
+                  }`}
+                >
+                  {usouIA && <Sparkles className="w-2.5 h-2.5" />}
+                  <span>{usouIA ? "Organizado com IA" : "Identificação local"}</span>
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => setPasso(1)}
@@ -783,6 +1010,15 @@ export default function ImportarCupomPage() {
                 Escanear outro cupom
               </button>
             </div>
+
+            {/* Sugestões de marcas já usadas pelo grupo */}
+            {marcasHistorico.length > 0 && (
+              <datalist id="marcas-historico-cupom">
+                {marcasHistorico.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+            )}
 
             {/* Lista dos Itens com Comparação Inteligente */}
             <div className="flex flex-col gap-3.5">
@@ -932,6 +1168,7 @@ export default function ImportarCupomPage() {
                             </label>
                             <input
                               type="text"
+                              list="marcas-historico-cupom"
                               value={rev.marcaConfirmada}
                               onChange={(e) => atualizarMarcaItem(index, e.target.value)}
                               placeholder="Ex: Tio João, Italac, Sadia..."

@@ -31,38 +31,90 @@ export interface DadosCupomFiscal {
   aviso?: string;
 }
 
-// Lista de marcas comuns de supermercados brasileiros para detecção automática
+// Lista de marcas comuns de supermercados, atacadistas e marcas regionais brasileiras
 const MARCAS_COMUNS = [
-  "TIO JOAO", "TIO JOÃO", "CAMIL", "DONA BENTA", "RENATA", "BARILLA", "ADRIA", "VILMA",
-  "ITALAC", "PIRACANJUBA", "NINHO", "NESTLE", "NESTLÉ", "DANONE", "VIGOR", "BATAVO",
-  "ELEFANTE", "POMAROLA", "FUGINI", "HEINZ", "HELLMANNS", "HELLMANN'S", "QUALY", "CLAYBOM", "DELICIA", "DELÍCIA",
-  "SADIA", "PERDIGAO", "PERDIGÃO", "SEARA", "AURORA", "SWIFT", "FRIBOI", "MATOBOI",
-  "YPE", "YPÊ", "OMO", "BRILHANTE", "ARIEL", "COMFORTO", "DOWNY", "VEJA", "BOMBRIL",
-  "COLGATE", "ORAL-B", "SORRISO", "CLOSEUP", "SENSODYNE", "DOVE", "NIVEA", "PALMOLIVE", "REXONA",
-  "COCA COLA", "COCA-COLA", "PEPSI", "GUARANA ANTARCTICA", "GUARANÁ", "FANTA", "SPRITE", "SCHWEPPES",
-  "AMBEV", "BRAHMA", "SKOL", "HEINEKEN", "AMSTEL", "BUDWEISER", "CORONA", "EISENBAHN",
-  "BAUDUCCO", "MARILAN", "M. DIAS BRANCO", "PASSA TEMPO", "TRAKINAS", "NESTLE", "GAROTO", "LACTA",
-  "MELITTA", "PILAO", "PILÃO", "3 CORACOES", "3 CORAÇÕES", "SANTA CLARA", "CABOCLO", "NESCAFE", "NESCAFÉ",
-  "SUAVINHO", "PINHO SOL", "LIZOFORM", "VANISH", "MINUANO", "LIMPOL", "YOKI", "KITANO", "SAZON", "MAGGI"
+  // Panificação, confeitaria e massas
+  "Marquespan", "Veneza", "Wickbold", "Pullman", "Plus Vita", "Panco", "Visconti", "Seven Boys", "Casa Suíça",
+  "Bauducco", "Marilan", "M. Dias Branco", "Piraquê", "Vitarella", "Fortaleza", "Mabel", "Oreo", "Passatempo", "Passa Tempo", "Trakinas", "Bono", "Negresco",
+  "Tio João", "Camil", "Prato Fino", "Kicaldo", "Namorado", "Broto Legal", "Urbano", "Zaeli", "Pachá",
+  "Dona Benta", "Renata", "Barilla", "Adria", "Vilma", "Galo", "Petybon", "Santa Amália",
+  // Laticínios, frios, carnes e embutidos
+  "Italac", "Piracanjuba", "Ninho", "Nestlé", "Danone", "Danoninho", "Vigor", "Batavo", "Elegê", "Itambé", "Tirol",
+  "Jussara", "Leitíssimo", "Atilatte", "Verde Campo", "Catupiry", "Polenghi", "Aviação", "Président", "President", "Quatá",
+  "Yakult", "Activia", "Chamyto", "Mococa", "Parmalat", "São Vicente",
+  "Sadia", "Perdigão", "Seara", "Aurora", "Bello", "Copacol", "Lar", "Frimesa", "Swift", "Friboi", "Mataboi", "Pamplona", "Ceratti", "Rezende",
+  // Mercearia, molhos, temperos, óleos e doces
+  "Kinino", "Kodilar", "Donana", "Vitália", "Vitalia", "Predilecta", "Quero", "Elefante", "Pomarola", "Fugini",
+  "Heinz", "Hellmann's", "Hellmanns", "Qualy", "Claybom", "Delícia", "Becel",
+  "Soya", "Liza", "Concórdia", "Salada", "Gallo", "Andorinha", "Borges", "Carbonell",
+  "União", "Da Barra", "Guarani", "Caravelas", "Cisne", "Lebre",
+  "Yoki", "Kitano", "Sazón", "Sazon", "Maggi", "Knorr", "Arisco", "Ajinomoto", "Sakura",
+  "Royal", "Dr. Oetker", "Maizena", "Quaker", "Neston", "Mucilon", "Toddy", "Nescau", "Toddynho", "Ovomaltine", "Nutella",
+  "Garoto", "Lacta", "Hershey's", "Ferrero", "Kinder", "Elma Chips", "Doritos", "Cheetos", "Ruffles", "Fandangos", "Torcida", "Club Social",
+  // Café e bebidas
+  "Melitta", "Pilão", "3 Corações", "Santa Clara", "Caboclo", "Nescafé", "Orfeu",
+  "Coca-Cola", "Coca Cola", "Pepsi", "Guaraná Antarctica", "Guaraná", "Fanta", "Sprite", "Schweppes", "Kuat", "Sukita", "Dolly", "H2OH",
+  "Del Valle", "Tang", "Clight", "Mid", "Camp", "Sufresh", "Maguary", "Dafruta", "Prats", "Natural One", "Campo Largo",
+  "Crystal", "Minalba", "Bonafont",
+  "Ambev", "Brahma", "Skol", "Antarctica", "Original", "Bohemia", "Spaten", "Stella Artois", "Heineken", "Amstel", "Budweiser", "Corona", "Eisenbahn", "Itaipava", "Petra",
+  // Limpeza, higiene e pet
+  "Ypê", "Omo", "Brilhante", "Tixan", "Ariel", "Downy", "Comfort", "Conforto", "Veja", "Pinho Sol", "Lysoform", "Lizoform",
+  "Vanish", "Minuano", "Limpol", "Qboa", "Q-Boa", "Cândida", "Bombril", "Assolan", "Scotch-Brite",
+  "Neve", "Personal", "Dualette", "Elite", "Scott",
+  "Colgate", "Oral-B", "Sorriso", "Closeup", "Close Up", "Sensodyne",
+  "Dove", "Nivea", "Palmolive", "Rexona", "Lux", "Protex", "Granado", "Phebo",
+  "Seda", "Pantene", "Tresemmé", "Elseve", "L'Oréal", "Loreal", "Garnier", "Gillette", "Bic",
+  "Pampers", "Huggies", "Always", "Intimus",
+  "Pedigree", "Whiskas", "Golden", "Premier", "Magnus", "Special Dog", "Friskies",
 ];
 
 /**
- * Tenta identificar uma marca conhecida dentro do texto do produto
+ * Normaliza texto removendo acentos e convertendo para maiúsculas para comparação segura
  */
-export function extrairMarcaDoTexto(texto: string): string | undefined {
-  if (!texto) return undefined;
-  const upper = texto.toUpperCase();
+function normalizarParaBuscaMarca(texto: string): string {
+  return (texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  for (const marca of MARCAS_COMUNS) {
-    // Procura a marca como palavra inteira
-    const regex = new RegExp(`\\b${marca.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "i");
-    if (regex.test(upper)) {
-      // Normaliza para formato Capitalizado (ex: "Italac")
-      return marca
-        .toLowerCase()
-        .split(" ")
-        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-        .join(" ");
+function escaparRegex(valor: string): string {
+  return valor.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+}
+
+/**
+ * Tenta identificar uma marca conhecida (ou já usada no histórico do grupo) dentro do texto do produto
+ */
+export function extrairMarcaDoTexto(
+  texto: string,
+  marcasExtras: string[] = []
+): string | undefined {
+  if (!texto) return undefined;
+  const textoNorm = normalizarParaBuscaMarca(texto);
+  if (!textoNorm) return undefined;
+
+  // Prioriza marcas mais longas (compostas) e coloca o histórico do usuário na frente
+  const extrasOrdenadas = [...marcasExtras]
+    .map((m) => (m || "").trim())
+    .filter((m) => m.length >= 2)
+    .sort((a, b) => b.length - a.length);
+
+  const comunsOrdenadas = [...MARCAS_COMUNS].sort((a, b) => b.length - a.length);
+  const candidatas = [...extrasOrdenadas, ...comunsOrdenadas];
+
+  for (const marca of candidatas) {
+    const marcaNorm = normalizarParaBuscaMarca(marca);
+    if (marcaNorm.length < 2) continue;
+
+    // Garante palavra inteira mesmo quando o cupom vem com barras ou pontuação
+    const regex = new RegExp(
+      `(?:^|[^A-Z0-9])${escaparRegex(marcaNorm)}(?:$|[^A-Z0-9])`,
+      "i"
+    );
+    if (regex.test(textoNorm)) {
+      return marca;
     }
   }
 
