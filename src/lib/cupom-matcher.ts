@@ -123,22 +123,55 @@ export function formatarNomeParaCadastro(descBruta: string): string {
 export function inferirSetorPorNome(nome: string, setores: Sector[]): Sector | null {
   const n = normalizarTexto(nome);
 
-  const regras: { regex: RegExp; nomeSetor: string }[] = [
-    { regex: /\b(maca|banana|laranja|limao|tomate|batata|cebola|alho|alface|cenoura|fruta|legume|verdura|chuchu|uva|coco|manga|mamao|abacaxi|melancia|melao|pera|morango|abobrinha|pepino|beterraba|mandioca)\b/i, nomeSetor: "Hortifruti" },
-    { regex: /\b(carne|patinho|alcatra|contra|coxao|picanha|frango|peito|sobrecoxa|peixe|tilapia|salmao|costela|bife|coxinha|asa|filezinho|ling|linguica|suina|bov|peixinho|acem|paleta|moida|costelinha|bacon|pernil)\b/i, nomeSetor: "Açougue" },
-    { regex: /\b(pao|bisnaga|torrada|croissant|bolo|rosca|baguete|panetone|chocotone|biscoito|bolacha)\b/i, nomeSetor: "Padaria" },
-    { regex: /\b(leite|queijo|mussarela|presunto|iogurte|iog|danone|manteiga|requeijao|parmesao|prato|ricota|nata)\b/i, nomeSetor: "Laticínios" },
-    { regex: /\b(arroz|feijao|macarrao|oleo|azeite|farinha|acucar|sal|cafe|molho|extrato|milho|ervilha|sardinha|atum|oregano|camomila|manjericao|vinagre|tempero|condimento|fermento)\b/i, nomeSetor: "Mercearia" },
-    { regex: /\b(refrigerante|suco|cerveja|agua|vodka|vinho|energetico|cha|nectar|coca|pepsi)\b/i, nomeSetor: "Bebidas" },
-    { regex: /\b(detergente|sabao|amaciante|desinfetante|cloro|agua sanitaria|esponja|vassoura|multiuso|limpador)\b/i, nomeSetor: "Limpeza" },
-    { regex: /\b(shampoo|condicionador|sabonete|creme dental|pasta|desodorante|escova|fio dental|hidratante)\b/i, nomeSetor: "Higiene" },
-    { regex: /\b(lasanha|pizza|hamburguer|nuggets|batata palito|sorvete|polpa|congelado)\b/i, nomeSetor: "Congelados" },
-    { regex: /\b(racao|pet|gato|cachorro|pedigree|whiskas|areia sanit)\b/i, nomeSetor: "Pet" },
+  const regras: { regex: RegExp; apelidosSetor: string[] }[] = [
+    {
+      regex: /\b(maca|banana|laranja|limao|tomate|batata|cebola|alho|alface|cenoura|fruta|legume|verdura|chuchu|uva|coco|manga|mamao|abacaxi|melancia|melao|pera|morango|abobrinha|pepino|beterraba|mandioca)\b/i,
+      apelidosSetor: ["hortifruti", "horti fruti", "feira", "fruta", "verdura", "legume", "sacolao"],
+    },
+    {
+      regex: /\b(carne|patinho|alcatra|contra|coxao|picanha|frango|peito|sobrecoxa|peixe|tilapia|salmao|costela|bife|coxinha|asa|filezinho|ling|linguica|suina|bov|peixinho|acem|paleta|moida|costelinha|bacon|pernil)\b/i,
+      apelidosSetor: ["acougue", "carne", "peixaria"],
+    },
+    {
+      regex: /\b(pao|bisnaga|torrada|croissant|bolo|rosca|baguete|panetone|chocotone|biscoito|bolacha)\b/i,
+      apelidosSetor: ["padaria", "panificadora", "paes"],
+    },
+    {
+      regex: /\b(leite|queijo|mussarela|presunto|iogurte|iog|danone|manteiga|requeijao|parmesao|prato|ricota|nata)\b/i,
+      apelidosSetor: ["laticinio", "frios"],
+    },
+    {
+      regex: /\b(arroz|feijao|macarrao|oleo|azeite|farinha|acucar|sal|cafe|molho|extrato|milho|ervilha|sardinha|atum|oregano|camomila|manjericao|vinagre|tempero|condimento|fermento)\b/i,
+      apelidosSetor: ["mercearia", "alimento", "despensa"],
+    },
+    {
+      regex: /\b(refrigerante|suco|cerveja|agua|vodka|vinho|energetico|cha|nectar|coca|pepsi)\b/i,
+      apelidosSetor: ["bebida"],
+    },
+    {
+      regex: /\b(detergente|sabao|amaciante|desinfetante|cloro|agua sanitaria|esponja|vassoura|multiuso|limpador)\b/i,
+      apelidosSetor: ["limpeza", "lavanderia"],
+    },
+    {
+      regex: /\b(shampoo|condicionador|sabonete|creme dental|pasta|desodorante|escova|fio dental|hidratante)\b/i,
+      apelidosSetor: ["higiene", "perfumaria"],
+    },
+    {
+      regex: /\b(lasanha|pizza|hamburguer|nuggets|batata palito|sorvete|polpa|congelado)\b/i,
+      apelidosSetor: ["congelado", "sorvete"],
+    },
+    {
+      regex: /\b(racao|pet|gato|cachorro|pedigree|whiskas|areia sanit)\b/i,
+      apelidosSetor: ["pet", "animais"],
+    },
   ];
 
   for (const r of regras) {
     if (r.regex.test(n)) {
-      const achado = setores.find((s) => normalizarTexto(s.nome).includes(normalizarTexto(r.nomeSetor)));
+      const achado = setores.find((s) => {
+        const nomeSetorNorm = normalizarTexto(s.nome);
+        return r.apelidosSetor.some((apelido) => nomeSetorNorm.includes(apelido));
+      });
       if (achado) return achado;
     }
   }

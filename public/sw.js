@@ -1,4 +1,4 @@
-const CACHE_NAME = "pechincha-pwa-v1";
+const CACHE_NAME = "pechincha-pwa-v2";
 const URLS_PARA_CACHE = [
   "/",
   "/compra",
@@ -38,14 +38,15 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
-  // Não intercepta chamadas de API/Realtime do Supabase
+  // Não intercepta chamadas externas, APIs nem o próprio arquivo do Service Worker
   if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith("/api/") || url.pathname === "/sw.js") return;
 
   // Estratégia Network-First com fallback para o Cache quando o mercado estiver sem sinal
   event.respondWith(
     fetch(req)
       .then((res) => {
-        if (res && res.status === 200) {
+        if (res && res.status === 200 && !res.redirected) {
           const clone = res.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(req, clone);
