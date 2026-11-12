@@ -125,6 +125,32 @@ export function agruparItensCupom(itens: ItemCupomFiscal[]): ItemCupomFiscal[] {
 }
 
 /**
+ * Remove tags HTML e entidades básicas para leitura limpa de trechos de cupom
+ */
+function limparTrechoHtml(trecho: string): string {
+  return trecho
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Extrai o texto limpo de um span identificado pela classe CSS
+ */
+function extrairCampoSpan(blocoHtml: string, classeCss: string): string {
+  const regex = new RegExp(
+    `<span[^>]*class=["'][^"']*\\b${classeCss}\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/span>`,
+    "i"
+  );
+  const match = blocoHtml.match(regex);
+  return match?.[1] ? limparTrechoHtml(match[1]) : "";
+}
+
+/**
  * Faz parsing do HTML da página de consulta da SEFAZ (NFC-e padrão nacional Encat / SVRS / SP / MT / etc.)
  */
 export function parseCupomHtml(html: string): DadosCupomFiscal {
@@ -133,43 +159,82 @@ export function parseCupomHtml(html: string): DadosCupomFiscal {
   let mercadoCnpj: string | undefined;
   let dataEmissao: string | undefined;
   let totalCupom: number | undefined;
+  let totalBrutoHtml: number | undefined;
+  let totalDescontosHtml: number | undefined;
+
+  const textoLimpoHtml = limparTrechoHtml(html);
 
   // 1. Extração dos dados do Mercado (Razão Social e CNPJ)
-  // Padrão 1: class="txtTopo" ou "txtRazaoSocial"
-  const mNomeMatch = html.match(/<div[^>]*class=["'][^"']*(?:txtTopo|txtRazaoSocial|xNome)[^"']*["'][^>]*>([^<]+)<\/div>/i) ||
-                     html.match(/<span[^>]*class=["'][^"']*(?:txtTopo|txtRazaoSocial|xNome)[^"']*["'][^>]*>([^<]+)<\/span>/i);
+  const mNomeMatch = html.match(/<div[^>]*class=["'][^"']*(?:txtTopo|txtRazaoSocial|xNome)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i) ||
+                     html.match(/<span[^>]*class=["'][^"']*(?:txtTopo|txtRazaoSocial|xNome)[^"']*["'][^>]*>([\s\S]*?)<\/span>/i);
   if (mNomeMatch && mNomeMatch[1]) {
-    mercadoNome = mNomeMatch[1].trim();
+    mercadoNome = limparTrechoHtml(mNomeMatch[1]);
   }
 
   // CNPJ: Procura padrão de CNPJ (XX.XXX.XXX/XXXX-XX)
-  const cnpjMatch = html.match(/CNPJ[:\s]*([0-9]{2}\.[0-9]{3}\.[0-9]{3}\/[0-9]{4}-[0-9]{2})/i) ||
-                    html.match(/([0-9]{2}\.[0-9]{3}\.[0-9]{3}\/[0-9]{4}-[0-9]{2})/);
+  const cnpjMatch = textoLimpoHtml.match(/CNPJ[:\s]*([0-9]{2}\.[0-9]{3}\.[0-9]{3}\/[0-9]{4}-[0-9]{2})/i) ||
+                    textoLimpoHtml.match(/([0-9]{2}\.[0-9]{3}\.[0-9]{3}\/[0-9]{4}-[0-9]{2})/);
   if (cnpjMatch && cnpjMatch[1]) {
     mercadoCnpj = cnpjMatch[1].trim();
   }
 
-  // Data de Emissão: Procura padrão dd/mm/aaaa hh:mm:ss
-  const dataMatch = html.match(/(?:Emiss[aã]o|Data)[:\s]*([0-9]{2}\/[0-9]{2}\/[0-9]{4}(?:\s+[0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?)/i) ||
-                    html.match(/([0-9]{2}\/[0-9]{2}\/[0-9]{4}\s+[0-9]{2}:[0-9]{2})/);
+  // Data de Emissão: Procura padrão dd/mm/aaaa hh:mm(:ss)
+  const dataMatch = textoLimpoHtml.match(/(?:Emiss[aã]o|Data)[:\s]*([0-9]{2}\/[0-9]{2}\/[0-9]{4}(?:\s+[0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?)/i) ||
+                    textoLimpoHtml.match(/([0-9]{2}\/[0-9]{2}\/[0-9]{4}\s+[0-9]{2}:[0-9]{2})/);
   if (dataMatch && dataMatch[1]) {
     dataEmissao = dataMatch[1].trim();
   }
 
-  // Total Geral da Nota
-  const totalMatch = html.match(/<span[^>]*class=["'][^"']*totalNumb[^"']*["'][^>]*>([^<]+)<\/span>/i) ||
-                     html.match(/(?:Valor a pagar|Valor total|Total R\$)[:\s]*<span[^>]*>([^<]+)<\/span>/i) ||
-                     html.match(/(?:Valor a pagar|Valor total|Total R\$)[:\s]*R?\$?\s*([0-9]+[.,][0-9]{2})/i);
-  if (totalMatch && totalMatch[1]) {
-    totalCupom = parseNumeroBR(totalMatch[1]);
+  // Total Bruto, Descontos e Valor a Pagar (prioriza rótulos explícitos para não confundir com Qtd. total de itens)
+  const regexValorMonetario = "([0-9]+(?:\\.[0-9]{3})*,[0-9]{2}|[0-9]+\\.[0-9]{2})";
+
+  const brutoMatch = textoLimpoHtml.match(
+    new RegExp(`Valor\\s+total\\s*(?:R\\$\\s*)?:?\\s*${regexValorMonetario}`, "i")
+  );
+  if (brutoMatch?.[1]) {
+    totalBrutoHtml = parseNumeroBR(brutoMatch[1]);
   }
 
-  // Total de Descontos no HTML
-  const descHtmlMatch = html.match(/(?:Descontos?|Total de Descontos?)[:\s]*<span[^>]*>([^<]+)<\/span>/i) ||
-                        html.match(/(?:Descontos?|Total de Descontos?)[:\s]*R?\$?\s*([0-9]+[.,][0-9]{2})/i);
-  let totalDescontosHtml: number | undefined;
-  if (descHtmlMatch && descHtmlMatch[1]) {
+  const descHtmlMatch = textoLimpoHtml.match(
+    new RegExp(`(?:Descontos?|Total\\s+de\\s+Descontos?)\\s*(?:R\\$\\s*)?:?\\s*${regexValorMonetario}`, "i")
+  );
+  if (descHtmlMatch?.[1]) {
     totalDescontosHtml = parseNumeroBR(descHtmlMatch[1]);
+  }
+
+  const pagarMatch = textoLimpoHtml.match(
+    new RegExp(`(?:Valor\\s+a\\s+pagar|Valor\\s+pago|Total\\s+l[ií]quido)\\s*(?:R\\$\\s*)?:?\\s*${regexValorMonetario}`, "i")
+  );
+  if (pagarMatch?.[1]) {
+    totalCupom = parseNumeroBR(pagarMatch[1]);
+  }
+
+  if (!totalCupom) {
+    const txtMax = extrairCampoSpan(html, "txtMax");
+    const maxMatch = txtMax.match(new RegExp(regexValorMonetario));
+    if (maxMatch?.[1]) {
+      totalCupom = parseNumeroBR(maxMatch[1]);
+    }
+  }
+
+  if (!totalCupom) {
+    const spansTotal = html.matchAll(/<span[^>]*class=["'][^"']*\btotalNumb\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi);
+    for (const st of spansTotal) {
+      const txt = limparTrechoHtml(st[1]);
+      // Ignora números inteiros (ex: "20" de Qtd. total de itens), aceita apenas valores monetários com centavos
+      const valMatch = txt.match(new RegExp(`^R?\\$?\\s*${regexValorMonetario}$`));
+      if (valMatch?.[1]) {
+        totalCupom = parseNumeroBR(valMatch[1]);
+      }
+    }
+  }
+
+  if (!totalCupom && totalBrutoHtml) {
+    totalCupom = totalBrutoHtml;
+  }
+
+  if (!totalDescontosHtml && totalBrutoHtml && totalCupom && totalBrutoHtml > totalCupom) {
+    totalDescontosHtml = Number((totalBrutoHtml - totalCupom).toFixed(2));
   }
 
   // 2. Extração dos Itens da Tabela
@@ -180,35 +245,40 @@ export function parseCupomHtml(html: string): DadosCupomFiscal {
     const trContent = match[1];
 
     // Nome / Descrição
-    const titMatch = trContent.match(/<span[^>]*class=["'][^"']*txtTit[^"']*["'][^>]*>([^<]+)<\/span>/i);
-    if (!titMatch || !titMatch[1]) continue;
-    const desc = titMatch[1].trim();
+    const desc = extrairCampoSpan(trContent, "txtTit");
+    if (!desc) continue;
 
     // Código
-    const codMatch = trContent.match(/<span[^>]*class=["'][^"']*RCod[^"']*["'][^>]*>[^\d]*(\d+)[^<]*<\/span>/i);
-    const codigo = codMatch && codMatch[1] ? codMatch[1].trim() : undefined;
+    const codTexto = extrairCampoSpan(trContent, "RCod");
+    const codMatch = codTexto.match(/(\d+)/);
+    const codigo = codMatch?.[1]?.trim();
 
     // Quantidade
-    const qtdMatch = trContent.match(/<span[^>]*class=["'][^"']*Rqtd[^"']*["'][^>]*>[^\d]*([0-9]+[.,]?[0-9]*)/i);
-    const quantidade = qtdMatch && qtdMatch[1] ? parseNumeroBR(qtdMatch[1]) : 1;
+    const qtdTexto = extrairCampoSpan(trContent, "Rqtd");
+    const qtdMatch = qtdTexto.match(/([0-9]+(?:[.,][0-9]+)?)/);
+    const quantidade = qtdMatch?.[1] ? parseNumeroBR(qtdMatch[1]) : 1;
 
-    // Unidade
-    const unMatch = trContent.match(/<span[^>]*class=["'][^"']*RUN[^"']*["'][^>]*>(?:UN:\s*)?([^<]+)<\/span>/i);
-    const unidade = unMatch && unMatch[1] ? normalizarUnidade(unMatch[1].replace(/UN:\s*/i, "").trim()) : "un";
+    // Unidade (remove tags como <strong>UN: </strong> antes de normalizar)
+    const unTexto = extrairCampoSpan(trContent, "RUN")
+      .replace(/^UN:\s*/i, "")
+      .trim();
+    const unidade = unTexto ? normalizarUnidade(unTexto) : "un";
 
     // Valor Unitário
-    const vlUnitMatch = trContent.match(/<span[^>]*class=["'][^"']*RvlUnit[^"']*["'][^>]*>[^\d]*([0-9]+[.,][0-9]{2})/i);
-    const valorUnitario = vlUnitMatch && vlUnitMatch[1] ? parseNumeroBR(vlUnitMatch[1]) : 0;
+    const vlUnitTexto = extrairCampoSpan(trContent, "RvlUnit");
+    const vlUnitMatch = vlUnitTexto.match(/([0-9]+(?:\.[0-9]{3})*,[0-9]{2,4}|[0-9]+[.,][0-9]{2,4})/);
+    const valorUnitario = vlUnitMatch?.[1] ? parseNumeroBR(vlUnitMatch[1]) : 0;
 
     // Valor Total
-    const vlTotalMatch = trContent.match(/<span[^>]*class=["'][^"']*valor[^"']*["'][^>]*>[^\d]*([0-9]+[.,][0-9]{2})/i);
-    const valorTotal = vlTotalMatch && vlTotalMatch[1] ? parseNumeroBR(vlTotalMatch[1]) : valorUnitario * quantidade;
+    const vlTotalTexto = extrairCampoSpan(trContent, "valor");
+    const vlTotalMatch = vlTotalTexto.match(/([0-9]+(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+[.,][0-9]{2})/);
+    const valorTotal = vlTotalMatch?.[1] ? parseNumeroBR(vlTotalMatch[1]) : valorUnitario * quantidade;
 
     // Filtro automático de Sacola Plástica
     const ehSacola = /sacola/i.test(desc);
 
     itens.push({
-      id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id_temp: `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${itens.length}`,
       descricao: desc,
       codigo,
       quantidade: quantidade > 0 ? quantidade : 1,
@@ -232,7 +302,9 @@ export function parseCupomHtml(html: string): DadosCupomFiscal {
     mercado_cnpj: mercadoCnpj,
     data_emissao: dataEmissao,
     total_cupom: totalCupom,
+    total_bruto: totalBrutoHtml,
     total_descontos: totalDescontosHtml,
+    total_pago: totalCupom,
     itens: itensAgrupados,
   };
 }

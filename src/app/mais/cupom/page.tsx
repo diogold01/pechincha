@@ -824,7 +824,7 @@ export default function ImportarCupomPage() {
                         </h3>
                         <p className="text-xs text-text-muted font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
                           <span>
-                            {rev.itemCupom.quantidade} {rev.itemCupom.unidade} ×{" "}
+                            {String(rev.itemCupom.quantidade).replace(".", ",")} {rev.itemCupom.unidade} ×{" "}
                             {formatarMoeda(rev.itemCupom.valor_unitario)}
                           </span>
                           <span>=</span>
@@ -1024,17 +1024,17 @@ export default function ImportarCupomPage() {
               <div className="max-w-md md:max-w-4xl lg:max-w-5xl mx-auto flex items-center justify-between gap-3">
                 <div className="flex flex-col min-w-0">
                   <span className="text-[11px] font-semibold text-text-muted truncate">
-                    Itens confirmados
-                  </span>
-                  <span className="text-sm sm:text-base font-extrabold text-text-main truncate">
                     {itensRevisao.filter((i) => !i.itemCupom.descartar).length}{" "}
-                    {itensRevisao.filter((i) => !i.itemCupom.descartar).length === 1 ? "produto" : "produtos"} (
+                    {itensRevisao.filter((i) => !i.itemCupom.descartar).length === 1
+                      ? "item confirmado"
+                      : "itens confirmados"}
+                  </span>
+                  <span className="text-base sm:text-lg font-extrabold text-text-main whitespace-nowrap">
                     {formatarMoeda(
                       itensRevisao
                         .filter((i) => !i.itemCupom.descartar)
                         .reduce((acc, curr) => acc + (curr.itemCupom.valor_total || 0), 0)
                     )}
-                    )
                   </span>
                 </div>
 
