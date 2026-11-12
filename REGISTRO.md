@@ -223,6 +223,13 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
   - Melhorada a identificação automática de setores usando apelidos comuns (ex.: `Horti Fruti`, `Feira`, `Frutas` para frutas/legumes) e ajustada a barra inferior do resumo no celular para exibir o valor total sem cortes, além da quantidade com vírgula decimal.
   - Atualizado o cache do app instalado no celular (`pechincha-pwa-v2`) com limpeza automática do cache antigo, exclusão de chamadas de API do cache, `updateViaCache: "none"` e aviso discreto de atualização disponível ao retornar para o app.
 
+---
+
+## IA Opcional no Cupom — Etapa 1: Configuração da Chave no App (Google AI Studio)
+- **Preferências locais no aparelho ([src/lib/ia-config.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/ia-config.ts)):** Criado o gerenciador que salva no navegador (`localStorage`) se a IA está ativada (`false` por padrão), a chave do Google AI Studio informada pelo usuário e o modelo selecionado (`gemini-3.8-flash` ou `gemini-3.5-flash-lite`), sem armazenar chaves no banco de dados.
+- **Rota segura de teste e análise ([src/app/api/cupom/ia/route.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/api/cupom/ia/route.ts)):** Criada a API que recebe a chave apenas na memória da requisição via cabeçalho HTTPS (`x-gemini-api-key`) para testar a chave na hora e analisar listas de produtos retornando nome limpo, marca e setor sugerido em JSON estruturado, traduzindo possíveis erros de chave ou limite de cota para mensagens simples em português.
+- **Tela "IA para Cupons" em Mais ([src/app/mais/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/page.tsx)):** Adicionado o cartão e o painel modal "Inteligência Artificial (Opcional)" com interruptor Ligar/Desligar, campo de senha com botão de visualizar/ocultar, link direto para gerar a chave gratuita no Google AI Studio, seletor de modelo e botões de **Testar chave**, **Remover** e **Salvar**.
+
 
 
 

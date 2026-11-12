@@ -16,10 +16,26 @@ import {
   History,
   Download,
   QrCode,
+  Sparkles,
+  Eye,
+  EyeOff,
+  KeyRound,
+  CheckCircle2,
+  ExternalLink,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
 import GuestConversionBanner from "@/components/GuestConversionBanner";
+import {
+  MODELOS_IA_DISPONIVEIS,
+  lerConfigIA,
+  limparChaveIA,
+  mascararChaveIA,
+  salvarConfigIA,
+  temIAConfigurada,
+  type ConfigIA,
+  type ModeloIA,
+} from "@/lib/ia-config";
 import type { Group, GroupSettings, Market, MetodoPreco, Sector } from "@/lib/types";
 
 const EMOJIS_SUGERIDOS = [
@@ -58,6 +74,23 @@ export default function MaisPage() {
   const [metodoPreco, setMetodoPreco] = useState<MetodoPreco>("media");
   const [mesesMedia, setMesesMedia] = useState<number>(3);
   const [fusoGrupo, setFusoGrupo] = useState<string>("America/Cuiaba");
+
+  // Estado da Configuração Opcional de IA (Google AI Studio no aparelho)
+  const [configIA, setConfigIA] = useState<ConfigIA>({
+    ativada: false,
+    apiKey: "",
+    modelo: "gemini-3.8-flash",
+  });
+  const [sheetIAAberto, setSheetIAAberto] = useState(false);
+  const [iaAtivadaForm, setIaAtivadaForm] = useState(false);
+  const [iaChaveForm, setIaChaveForm] = useState("");
+  const [iaModeloForm, setIaModeloForm] = useState<ModeloIA>("gemini-3.8-flash");
+  const [mostrarChaveIA, setMostrarChaveIA] = useState(false);
+  const [testandoIA, setTestandoIA] = useState(false);
+  const [feedbackIA, setFeedbackIA] = useState<{
+    tipo: "sucesso" | "erro";
+    texto: string;
+  } | null>(null);
 
   const carregarTudo = useCallback(async () => {
     setCarregando(true);
@@ -130,6 +163,7 @@ export default function MaisPage() {
 
   useEffect(() => {
     carregarTudo();
+    setConfigIA(lerConfigIA());
   }, [carregarTudo]);
 
   // --- Funções de Mercado ---
@@ -364,6 +398,97 @@ export default function MaisPage() {
     }
   }
 
+  // --- Funções da IA Opcional (Google AI Studio) ---
+  function abrirConfigIA() {
+    const atual = lerConfigIA();
+    setConfigIA(atual);
+    setIaAtivadaForm(atual.ativada);
+    setIaChaveForm(atual.apiKey);
+    setIaModeloForm(atual.modelo);
+    setMostrarChaveIA(false);
+    setFeedbackIA(null);
+    setSheetIAAberto(true);
+  }
+
+  async function handleTestarChaveIA() {
+    const chave = iaChaveForm.trim();
+    if (chave.length < 15) {
+      setFeedbackIA({
+        tipo: "erro",
+        texto: "Cole uma chave válida do Google AI Studio antes de testar.",
+      });
+      return;
+    }
+
+    setTestandoIA(true);
+    setFeedbackIA(null);
+    try {
+      const res = await fetch("/api/cupom/ia", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-gemini-api-key": chave,
+        },
+        body: JSON.stringify({
+          acao: "testar",
+          modelo: iaModeloForm,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        setFeedbackIA({
+          tipo: "erro",
+          texto: json?.erro || "Não foi possível validar a chave no momento.",
+        });
+        return;
+      }
+
+      setFeedbackIA({
+        tipo: "sucesso",
+        texto: json.mensagem || "Chave funcionando perfeitamente!",
+      });
+    } catch {
+      setFeedbackIA({
+        tipo: "erro",
+        texto: "Erro de conexão ao testar a chave. Verifique sua internet.",
+      });
+    } finally {
+      setTestandoIA(false);
+    }
+  }
+
+  function handleSalvarConfigIA(e: React.FormEvent) {
+    e.preventDefault();
+    const chave = iaChaveForm.trim();
+
+    if (iaAtivadaForm && chave.length < 15) {
+      setFeedbackIA({
+        tipo: "erro",
+        texto: "Para ativar a IA, cole primeiro sua chave do Google AI Studio.",
+      });
+      return;
+    }
+
+    const salva = salvarConfigIA({
+      ativada: iaAtivadaForm,
+      apiKey: chave,
+      modelo: iaModeloForm,
+    });
+    setConfigIA(salva);
+    setSheetIAAberto(false);
+  }
+
+  function handleRemoverChaveIA() {
+    const limpa = limparChaveIA();
+    setConfigIA(limpa);
+    setIaAtivadaForm(false);
+    setIaChaveForm("");
+    setFeedbackIA({
+      tipo: "sucesso",
+      texto: "Chave removida deste aparelho.",
+    });
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-text-main pb-28 md:pb-8 md:pl-64">
       <GuestConversionBanner onConverted={carregarTudo} />
@@ -548,6 +673,49 @@ export default function MaisPage() {
                   className="h-11 px-3.5 rounded-xl bg-background border border-border font-bold text-xs text-text-main hover:border-primary cursor-pointer"
                 >
                   Ajustar
+                </button>
+              </div>
+            </section>
+
+            {/* 3.5. INTELIGÊNCIA ARTIFICIAL OPCIONAL (GOOGLE AI STUDIO) */}
+            <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base font-extrabold">
+                        IA para Cupons
+                      </h2>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          temIAConfigurada(configIA)
+                            ? "bg-budget-green-bg text-budget-green-text"
+                            : "bg-background border border-border text-text-muted"
+                        }`}
+                      >
+                        {temIAConfigurada(configIA) ? "Ativa" : "Opcional"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-muted truncate">
+                      {temIAConfigurada(configIA)
+                        ? `Chave ${mascararChaveIA(configIA.apiKey)} · ${
+                            MODELOS_IA_DISPONIVEIS.find((m) => m.id === configIA.modelo)?.nome || configIA.modelo
+                          }`
+                        : configIA.apiKey
+                        ? `Desligada · Chave salva (${mascararChaveIA(configIA.apiKey)})`
+                        : "Use sua chave gratuita do Google AI Studio"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={abrirConfigIA}
+                  className="h-11 px-3.5 rounded-xl bg-background border border-border font-bold text-xs text-text-main hover:border-primary cursor-pointer shrink-0"
+                >
+                  Configurar
                 </button>
               </div>
             </section>
@@ -884,6 +1052,189 @@ export default function MaisPage() {
                 <Check className="w-4 h-4" />
                 <span>{salvando ? "Salvando..." : "Salvar configurações"}</span>
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL / BOTTOM SHEET: INTELIGÊNCIA ARTIFICIAL (GOOGLE AI STUDIO) */}
+      {sheetIAAberto && (
+        <div className="fixed inset-0 z-50 bg-black/45 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md md:max-w-lg bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl animate-in fade-in duration-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold leading-tight">
+                    Inteligência Artificial (Opcional)
+                  </h3>
+                  <p className="text-xs text-text-muted">
+                    Limpa nomes, separa marcas e sugere setores no cupom
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSheetIAAberto(false)}
+                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-text-muted cursor-pointer shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarConfigIA} className="flex flex-col gap-4">
+              {/* Interruptor Ligar / Desligar */}
+              <div className="bg-background border border-border rounded-2xl p-3.5 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-text-main">
+                    Ativar IA ao importar cupons
+                  </div>
+                  <div className="text-xs text-text-muted">
+                    Se desligada ou sem cota, usa o identificador grátis local
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={iaAtivadaForm}
+                  onClick={() => setIaAtivadaForm((v) => !v)}
+                  className={`w-12 h-7 rounded-full transition-colors p-0.5 flex items-center cursor-pointer shrink-0 ${
+                    iaAtivadaForm ? "bg-primary justify-end" : "bg-border justify-start"
+                  }`}
+                >
+                  <span className="w-6 h-6 rounded-full bg-white shadow-sm block" />
+                </button>
+              </div>
+
+              {/* Guia rápido de chave gratuita */}
+              <div className="bg-primary-light/50 border border-primary/20 rounded-2xl p-3.5 text-xs text-text-muted flex flex-col gap-1.5">
+                <div className="font-bold text-text-main flex items-center justify-between gap-2 flex-wrap">
+                  <span>Como pegar sua chave gratuita:</span>
+                  <a
+                    href="https://aistudio.google.com/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary font-extrabold hover:underline"
+                  >
+                    <span>Abrir Google AI Studio</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="leading-relaxed">
+                  Acesse com sua conta Google, clique em <strong>Create API key</strong> e cole o código abaixo. A chave fica salva <strong>apenas neste aparelho</strong> e só enviamos os nomes dos produtos do cupom.
+                </p>
+              </div>
+
+              {/* Campo da Chave */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-muted flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Sua chave da API (Google AI Studio)</span>
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type={mostrarChaveIA ? "text" : "password"}
+                    value={iaChaveForm}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setIaChaveForm(val);
+                      setFeedbackIA(null);
+                      if (!iaChaveForm.trim() && val.trim().length >= 15) {
+                        setIaAtivadaForm(true);
+                      }
+                    }}
+                    placeholder="Cole aqui (ex.: AIzaSy...)"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full h-12 pl-4 pr-12 rounded-xl bg-background border border-border text-sm font-semibold text-text-main focus:outline-none focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarChaveIA((v) => !v)}
+                    aria-label={mostrarChaveIA ? "Ocultar chave" : "Mostrar chave"}
+                    className="absolute right-2 w-9 h-9 rounded-lg flex items-center justify-center text-text-muted hover:text-text-main cursor-pointer"
+                  >
+                    {mostrarChaveIA ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Escolha do Modelo */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-muted">
+                  Modelo do Gemini
+                </label>
+                <div className="flex flex-col gap-2">
+                  {MODELOS_IA_DISPONIVEIS.map((mod) => (
+                    <button
+                      key={mod.id}
+                      type="button"
+                      onClick={() => setIaModeloForm(mod.id)}
+                      className={`p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                        iaModeloForm === mod.id
+                          ? "bg-primary-light border-primary text-text-main"
+                          : "bg-background border-border text-text-muted hover:text-text-main"
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">{mod.nome}</div>
+                      <div className="text-[11px] opacity-85 mt-0.5">{mod.descricao}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Retorno do Teste ou Validação */}
+              {feedbackIA && (
+                <div
+                  className={`px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-start gap-2 ${
+                    feedbackIA.tipo === "sucesso"
+                      ? "bg-budget-green-bg text-budget-green-text"
+                      : "bg-budget-red-bg text-budget-red-text"
+                  }`}
+                >
+                  {feedbackIA.tipo === "sucesso" ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  )}
+                  <span>{feedbackIA.texto}</span>
+                </div>
+              )}
+
+              {/* Ações */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleTestarChaveIA}
+                  disabled={testandoIA}
+                  className="h-12 px-4 rounded-btn bg-background border border-border hover:border-primary text-xs font-bold text-text-main flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+                >
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <span>{testandoIA ? "Testando..." : "Testar chave"}</span>
+                </button>
+
+                {iaChaveForm.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleRemoverChaveIA}
+                    className="h-12 px-3.5 rounded-btn border border-budget-red text-budget-red text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    title="Apagar chave salva deste aparelho"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Remover</span>
+                  </button>
+                )}
+
+                <button
+                  type="submit"
+                  className="flex-1 h-12 px-5 rounded-btn bg-primary hover:bg-primary-hover text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Salvar</span>
+                </button>
+              </div>
             </form>
           </div>
         </div>
