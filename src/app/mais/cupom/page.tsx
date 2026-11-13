@@ -30,6 +30,8 @@ import { formatarMoeda, parseDecimalBR } from "@/lib/format";
 import type { DadosCupomFiscal } from "@/lib/cupom-parser";
 import {
   correlacionarItensCupom,
+  normalizarTexto,
+  removerMarcaDoTexto,
   type ResultadoIAItem,
   type SugestaoMatchProduto,
 } from "@/lib/cupom-matcher";
@@ -81,6 +83,7 @@ export default function ImportarCupomPage() {
   const [mercadoSelecionadoId, setMercadoSelecionadoId] = useState<string>("");
   const [novoMercadoNome, setNovoMercadoNome] = useState("");
   const [gerandoCarrinho, setGerandoCarrinho] = useState(false);
+  const [indiceEscolhendoProduto, setIndiceEscolhendoProduto] = useState<number | null>(null);
 
   // Mantém preferência da IA sincronizada ao montar ou voltar da tela Mais
   useEffect(() => {
@@ -251,6 +254,7 @@ export default function ImportarCupomPage() {
       setMercadoSelecionadoId(padrao.id);
     }
 
+    setIndiceEscolhendoProduto(null);
     setPasso(2);
     setErro(null);
   }
@@ -368,11 +372,83 @@ export default function ImportarCupomPage() {
     setItensRevisao((prev) =>
       prev.map((item, idx) => (idx === index ? { ...item, ehMesmoProduto: ehMesmo } : item))
     );
+    if (!ehMesmo) {
+      setIndiceEscolhendoProduto((atual) => (atual === index ? null : atual));
+    }
+  }
+
+  function associarProdutoExistente(index: number, productId: string) {
+    setItensRevisao((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        if (!productId) {
+          return {
+            ...item,
+            ehMesmoProduto: false,
+            produtoSugerido: null,
+          };
+        }
+
+        const prod = produtos.find((p) => p.id === productId);
+        if (!prod) return item;
+
+        const ehSetorGenerico = (sectorId?: string | null) => {
+          if (!sectorId) return true;
+          const sec = setores.find((s) => s.id === sectorId);
+          if (!sec) return true;
+          const norm = normalizarTexto(sec.nome);
+          return norm.includes("mercearia") || norm.includes("outros");
+        };
+
+        const setorAtualizado =
+          prod.sector_id && !ehSetorGenerico(prod.sector_id)
+            ? prod.sector_id
+            : item.setorSugeridoId || prod.sector_id || null;
+
+        const nomeSemMarca = item.marcaConfirmada.trim()
+          ? removerMarcaDoTexto(item.nomeFormatadoNovo, item.marcaConfirmada)
+          : item.nomeFormatadoNovo;
+
+        return {
+          ...item,
+          ehMesmoProduto: true,
+          produtoSugerido: prod,
+          scoreSimilaridade: 100,
+          nomeFormatadoNovo: nomeSemMarca,
+          setorSugeridoId: setorAtualizado,
+        };
+      })
+    );
+    setIndiceEscolhendoProduto(null);
   }
 
   function atualizarMarcaItem(index: number, marca: string) {
     setItensRevisao((prev) =>
-      prev.map((item, idx) => (idx === index ? { ...item, marcaConfirmada: marca } : item))
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const nomeAtualizado =
+          marca.trim().length >= 2
+            ? removerMarcaDoTexto(item.nomeFormatadoNovo, marca)
+            : item.nomeFormatadoNovo;
+        return {
+          ...item,
+          marcaConfirmada: marca,
+          nomeFormatadoNovo: nomeAtualizado,
+        };
+      })
+    );
+  }
+
+  function limparMarcaDoNomeManual(index: number) {
+    setItensRevisao((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const nomeLimpo = removerMarcaDoTexto(
+          item.nomeFormatadoNovo,
+          item.marcaConfirmada
+        );
+        return { ...item, nomeFormatadoNovo: nomeLimpo };
+      })
     );
   }
 
@@ -507,8 +583,41 @@ export default function ImportarCupomPage() {
         const itemRev = itensValidos[i];
         let produtoId = itemRev.produtoSugerido?.id;
 
-        // Se for novo produto (ou usuário optou por cadastrar como novo), busca ou insere
-        if (!itemRev.ehMesmoProduto || !produtoId) {
+        if (itemRev.ehMesmoProduto && produtoId) {
+          // Atualiza o nome (sem a marca) e o setor do produto existente no catálogo quando alterados
+          const nomeFinal = (
+            itemRev.nomeFormatadoNovo ||
+            itemRev.produtoSugerido?.nome ||
+            itemRev.itemCupom.descricao
+          ).trim();
+          const setorId =
+            itemRev.setorSugeridoId ||
+            itemRev.produtoSugerido?.sector_id ||
+            setores[0]?.id ||
+            null;
+
+          if (
+            nomeFinal !== itemRev.produtoSugerido?.nome ||
+            setorId !== itemRev.produtoSugerido?.sector_id
+          ) {
+            const { error: errUpdateProd } = await supabase
+              .from("products")
+              .update({
+                nome: nomeFinal,
+                sector_id: setorId,
+              })
+              .eq("id", produtoId)
+              .eq("group_id", groupId);
+
+            if (errUpdateProd) {
+              console.error("Erro ao atualizar produto:", errUpdateProd);
+              throw new Error(
+                `Erro ao atualizar produto "${nomeFinal}": ${errUpdateProd.message}`
+              );
+            }
+          }
+        } else {
+          // Se for novo produto (ou usuário optou por cadastrar como novo), busca ou insere
           const setorId = itemRev.setorSugeridoId || setores[0]?.id || null;
           const nomeFinal = (itemRev.nomeFormatadoNovo || itemRev.itemCupom.descricao).trim();
 
@@ -1021,9 +1130,27 @@ export default function ImportarCupomPage() {
             )}
 
             {/* Lista dos Itens com Comparação Inteligente */}
+            {(() => {
+              const produtosOrdenados = [...produtos].sort((a, b) =>
+                a.nome.localeCompare(b.nome, "pt-BR")
+              );
+
+              return (
             <div className="flex flex-col gap-3.5">
               {itensRevisao.map((rev, index) => {
                 const descartado = rev.itemCupom.descartar;
+                const selecionandoOutro = indiceEscolhendoProduto === index;
+                const marcaAindaNoNome =
+                  rev.marcaConfirmada.trim().length >= 2 &&
+                  normalizarTexto(rev.nomeFormatadoNovo).includes(
+                    normalizarTexto(rev.marcaConfirmada)
+                  );
+                const vaiRenomearCatalogo =
+                  rev.ehMesmoProduto &&
+                  rev.produtoSugerido &&
+                  rev.nomeFormatadoNovo.trim().length > 0 &&
+                  rev.nomeFormatadoNovo.trim().toLowerCase() !==
+                    rev.produtoSugerido.nome.trim().toLowerCase();
 
                 return (
                   <div
@@ -1101,67 +1228,143 @@ export default function ImportarCupomPage() {
 
                     {!descartado && (
                       <div className="pt-2 border-t border-border flex flex-col gap-3">
-                        {/* Seletor: É o mesmo produto ou Cadastrar Novo? */}
-                        {rev.produtoSugerido ? (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <button
-                              type="button"
-                              onClick={() => alternarTipoProduto(index, true)}
-                              className={`h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                                rev.ehMesmoProduto
-                                  ? "bg-primary text-white shadow-2xs"
-                                  : "bg-background border border-border text-text-muted hover:text-text-main"
-                              }`}
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>É o mesmo: {rev.produtoSugerido.nome}</span>
-                              <span className="ml-1 text-[10px] opacity-80 bg-white/20 px-1.5 py-0.2 rounded-full">
-                                {rev.scoreSimilaridade}% match
+                        {/* Barra de Associação ao Catálogo */}
+                        <div className="flex flex-col gap-2">
+                          {rev.ehMesmoProduto && rev.produtoSugerido ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-primary text-white shadow-2xs">
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Associado: {rev.produtoSugerido.nome}</span>
+                                <span className="ml-1 text-[10px] opacity-80 bg-white/20 px-1.5 py-0.2 rounded-full">
+                                  {rev.scoreSimilaridade}%
+                                </span>
                               </span>
-                            </button>
 
-                            <button
-                              type="button"
-                              onClick={() => alternarTipoProduto(index, false)}
-                              className={`h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                                !rev.ehMesmoProduto
-                                  ? "bg-primary text-white shadow-2xs"
-                                  : "bg-background border border-border text-text-muted hover:text-text-main"
-                              }`}
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Cadastrar como produto separado</span>
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-light text-primary text-xs font-bold border border-primary/20">
-                              <Sparkles className="w-3.5 h-3.5" />
-                              <span>Novo produto (será cadastrado automaticamente no catálogo)</span>
-                            </span>
-                          </div>
-                        )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setIndiceEscolhendoProduto(selecionandoOutro ? null : index)
+                                }
+                                className="h-9 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-background border border-border text-text-muted hover:text-text-main hover:border-primary transition-all cursor-pointer"
+                              >
+                                <Link2 className="w-3.5 h-3.5" />
+                                <span>Associar a outro</span>
+                              </button>
 
-                        {/* Campos de Ajuste do Item */}
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 bg-background/60 p-3 rounded-2xl border border-border">
-                          {/* Nome Novo (se for cadastrar) */}
-                          {!rev.ehMesmoProduto && (
-                            <div className="sm:col-span-6 flex flex-col gap-1">
-                              <label className="text-[11px] font-bold text-text-muted">
-                                Nome no catálogo
-                              </label>
-                              <input
-                                type="text"
-                                value={rev.nomeFormatadoNovo}
-                                onChange={(e) => atualizarNomeNovo(index, e.target.value)}
-                                className="h-9 px-3 rounded-lg bg-card border border-border text-xs text-text-main focus:outline-none focus:border-primary"
-                                placeholder="Nome formatado"
-                              />
+                              <button
+                                type="button"
+                                onClick={() => alternarTipoProduto(index, false)}
+                                className="h-9 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-background border border-border text-text-muted hover:text-text-main transition-all cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Cadastrar separado</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-light text-primary text-xs font-bold border border-primary/20">
+                                <Sparkles className="w-3.5 h-3.5" />
+                                <span>Novo produto no catálogo</span>
+                              </span>
+
+                              {produtosOrdenados.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setIndiceEscolhendoProduto(selecionandoOutro ? null : index)
+                                  }
+                                  className={`h-9 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                                    selecionandoOutro
+                                      ? "bg-primary text-white shadow-2xs"
+                                      : "bg-background border border-border text-text-main hover:border-primary"
+                                  }`}
+                                >
+                                  <Link2 className="w-3.5 h-3.5" />
+                                  <span>Associar a produto existente</span>
+                                </button>
+                              )}
+
+                              {rev.produtoSugerido && (
+                                <button
+                                  type="button"
+                                  onClick={() => alternarTipoProduto(index, true)}
+                                  className="h-9 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-background border border-border text-text-muted hover:text-text-main transition-all cursor-pointer"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Usar: {rev.produtoSugerido.nome}</span>
+                                </button>
+                              )}
                             </div>
                           )}
 
+                          {/* Aviso quando o nome limpo vai atualizar o nome antigo no catálogo */}
+                          {vaiRenomearCatalogo && (
+                            <p className="text-[11px] font-semibold text-primary px-0.5">
+                              O nome no catálogo será atualizado para{" "}
+                              <strong>&ldquo;{rev.nomeFormatadoNovo}&rdquo;</strong> ao gerar o carrinho.
+                            </p>
+                          )}
+
+                          {/* Seletor inline para associar manualmente a qualquer produto do catálogo */}
+                          {selecionandoOutro && (
+                            <div className="flex items-center gap-2 bg-background p-2.5 rounded-xl border border-primary/40">
+                              <select
+                                value={rev.ehMesmoProduto && rev.produtoSugerido ? rev.produtoSugerido.id : ""}
+                                onChange={(e) => associarProdutoExistente(index, e.target.value)}
+                                className="flex-1 h-9 px-3 rounded-lg bg-card border border-border text-xs font-semibold text-text-main focus:outline-none focus:border-primary min-w-0"
+                              >
+                                <option value="">+ Criar como produto novo (sem associar)</option>
+                                {produtosOrdenados.map((p) => {
+                                  const sec = setores.find((s) => s.id === p.sector_id);
+                                  return (
+                                    <option key={p.id} value={p.id}>
+                                      {sec ? `${sec.emoji} ` : ""}
+                                      {p.nome} ({p.unidade})
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => setIndiceEscolhendoProduto(null)}
+                                className="w-9 h-9 rounded-lg bg-card border border-border flex items-center justify-center text-text-muted hover:text-text-main cursor-pointer shrink-0"
+                                title="Fechar seletor"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Campos de Ajuste do Item (sempre visíveis e editáveis) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 bg-background/60 p-3 rounded-2xl border border-border">
+                          {/* Nome no catálogo (sempre editável) */}
+                          <div className="sm:col-span-6 flex flex-col gap-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-[11px] font-bold text-text-muted">
+                                Nome do produto (sem a marca)
+                              </label>
+                              {marcaAindaNoNome && (
+                                <button
+                                  type="button"
+                                  onClick={() => limparMarcaDoNomeManual(index)}
+                                  className="text-[10px] font-bold text-primary hover:underline cursor-pointer"
+                                >
+                                  Tirar marca
+                                </button>
+                              )}
+                            </div>
+                            <input
+                              type="text"
+                              value={rev.nomeFormatadoNovo}
+                              onChange={(e) => atualizarNomeNovo(index, e.target.value)}
+                              className="h-9 px-3 rounded-lg bg-card border border-border text-xs text-text-main focus:outline-none focus:border-primary"
+                              placeholder="Nome limpo do produto"
+                            />
+                          </div>
+
                           {/* Marca (Editável) */}
-                          <div className={`flex flex-col gap-1 ${rev.ehMesmoProduto ? "sm:col-span-12" : "sm:col-span-6"}`}>
+                          <div className="sm:col-span-6 flex flex-col gap-1">
                             <label className="text-[11px] font-bold text-text-muted flex items-center gap-1">
                               <Tag className="w-3 h-3" />
                               <span>Marca ou Sabor</span>
@@ -1176,25 +1379,23 @@ export default function ImportarCupomPage() {
                             />
                           </div>
 
-                          {/* Setor (se for novo produto) */}
-                          {!rev.ehMesmoProduto && (
-                            <div className="sm:col-span-12 flex flex-col gap-1">
-                              <label className="text-[11px] font-bold text-text-muted">
-                                Setor do mercado
-                              </label>
-                              <select
-                                value={rev.setorSugeridoId || ""}
-                                onChange={(e) => atualizarSetorNovo(index, e.target.value)}
-                                className="h-9 px-3 rounded-lg bg-card border border-border text-xs text-text-main focus:outline-none focus:border-primary"
-                              >
-                                {setores.map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.emoji} {s.nome}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
+                          {/* Setor do mercado (sempre editável) */}
+                          <div className="sm:col-span-12 flex flex-col gap-1">
+                            <label className="text-[11px] font-bold text-text-muted">
+                              Setor do mercado
+                            </label>
+                            <select
+                              value={rev.setorSugeridoId || ""}
+                              onChange={(e) => atualizarSetorNovo(index, e.target.value)}
+                              className="h-9 px-3 rounded-lg bg-card border border-border text-xs text-text-main focus:outline-none focus:border-primary"
+                            >
+                              {setores.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.emoji} {s.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
                           {/* Edição de Preço Unitário e Tipo de Preço (Atacado / Varejo) */}
                           <div className="sm:col-span-12 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-border/70">
@@ -1255,6 +1456,8 @@ export default function ImportarCupomPage() {
                 );
               })}
             </div>
+              );
+            })()}
 
             {/* Barra Inferior Fixa de Conclusão / Geração do Carrinho */}
             <div className="fixed bottom-16 md:bottom-0 left-0 right-0 md:pl-64 bg-card/95 backdrop-blur-md border-t border-border p-3 sm:p-4 z-30 shadow-lg">

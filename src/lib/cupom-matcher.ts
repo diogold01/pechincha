@@ -105,7 +105,10 @@ export function calcularScoreSimilaridade(str1: string, str2: string): number {
   return Math.round(scoreTokens * 0.6 + scoreLev * 0.4);
 }
 
-function removerMarcaDoTexto(texto: string, marca?: string): string {
+/**
+ * Remove a marca do nome do produto quando houver outras palavras descritivas além da marca
+ */
+export function removerMarcaDoTexto(texto: string, marca?: string): string {
   if (!marca || !marca.trim()) return texto;
   const tokensMarca = normalizarTexto(marca).split(" ").filter(Boolean);
   if (tokensMarca.length === 0) return texto;
@@ -140,6 +143,15 @@ function removerMarcaDoTexto(texto: string, marca?: string): string {
 }
 
 /**
+ * Remove unidade solta ao final (ex.: "CHUCHU KG" -> "Chuchu"), mantendo medidas como "5kg" ou "400g"
+ */
+function limparUnidadeFinal(texto: string): string {
+  const limpo = (texto || "").trim();
+  const semUnidadeFinal = limpo.replace(/\s+(?:kg|un|und)\.?$/i, "").trim();
+  return semUnidadeFinal.length > 1 ? semUnidadeFinal : limpo;
+}
+
+/**
  * Limpa termos fiscais e formata um nome agradável para cadastro novo
  * Ex: "ARROZ TIO JOAO TP1 5KG" -> "Arroz 5kg" (quando a marca Tio João for separada)
  */
@@ -154,12 +166,7 @@ export function formatarNomeParaCadastro(
     .trim();
 
   limpo = removerMarcaDoTexto(limpo, marcaRemover);
-
-  // Remove unidade solta ao final (ex.: "CHUCHU KG" -> "Chuchu"), mantendo medidas como "5kg"
-  const semUnidadeFinal = limpo.replace(/\s+(?:kg|un|und)\.?$/i, "").trim();
-  if (semUnidadeFinal.length > 1) {
-    limpo = semUnidadeFinal;
-  }
+  limpo = limparUnidadeFinal(limpo);
 
   const preposicoes = new Set(["de", "da", "do", "das", "dos", "e", "com", "em"]);
 
@@ -342,7 +349,9 @@ export function correlacionarItensCupom(
 
     const nomeLimpoFinal =
       itemIA?.nome_limpo && itemIA.nome_limpo.trim().length > 1
-        ? itemIA.nome_limpo.trim()
+        ? limparUnidadeFinal(
+            removerMarcaDoTexto(itemIA.nome_limpo.trim(), marcaFinal)
+          )
         : formatarNomeParaCadastro(item.descricao, marcaFinal);
 
     // 2. Compara catálogo usando tanto a descrição original da nota quanto o nome limpo
@@ -371,12 +380,29 @@ export function correlacionarItensCupom(
 
     const ehMesmo = maiorScore >= 65 && melhorProduto !== null;
 
-    // 3. Resolve o setor (mantém o setor atual se já existe no catálogo)
+    // 3. Resolve o setor (corrige produtos que estavam em setor genérico se houver sugestão específica)
     const setorResolvido = resolverSetorSugerido(
       itemIA?.setor,
       [nomeLimpoFinal, item.descricao],
       setores
     );
+
+    const ehSetorGenerico = (sectorId?: string | null) => {
+      if (!sectorId) return true;
+      const sec = setores.find((s) => s.id === sectorId);
+      if (!sec) return true;
+      const norm = normalizarTexto(sec.nome);
+      return norm.includes("mercearia") || norm.includes("outros");
+    };
+
+    const setorFinalId =
+      ehMesmo && melhorProduto
+        ? ehSetorGenerico(melhorProduto.sector_id) &&
+          setorResolvido &&
+          !ehSetorGenerico(setorResolvido.id)
+          ? setorResolvido.id
+          : melhorProduto.sector_id
+        : setorResolvido?.id || null;
 
     return {
       itemCupom: item,
@@ -385,10 +411,7 @@ export function correlacionarItensCupom(
       ehMesmoProduto: ehMesmo,
       ehAtacado: Boolean(item.eh_atacado),
       marcaConfirmada: marcaFinal,
-      setorSugeridoId:
-        ehMesmo && melhorProduto
-          ? melhorProduto.sector_id
-          : setorResolvido?.id || null,
+      setorSugeridoId: setorFinalId,
       nomeFormatadoNovo: nomeLimpoFinal,
       precoDigitadoTexto:
         item.valor_unitario > 0
