@@ -237,6 +237,12 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **Comparação dupla e organização inteligente ([src/lib/cupom-matcher.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-matcher.ts)):** Atualizado o motor de comparação para combinar o nome limpo pela IA (ou formatado localmente sem marca e sem unidade repetida no final) com a descrição original da nota para não perder produtos já cadastrados, além de ampliar a detecção de setores (Hortifruti, Padaria, Laticínios, Açougue, Mercearia e demais).
 - **Integração completa na tela de cupom ([src/app/mais/cupom/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/cupom/page.tsx)):** Adicionado controle rápido antes da importação para ligar/desligar a IA ou ir configurar a chave em Mais, chamada automática ao Google AI Studio após ler QR Code/PDF/link, sugestões de marcas já usadas no histórico do grupo (`prices` e `cart_items`) e retorno automático e seguro para o Plano B local caso a IA esteja desligada ou apresente erro de cota.
 
+---
+
+## Ajuste na Revisão do Cupom — Limpeza de Marca no Nome e Botão Associar
+- **Garantia de nome limpo sem marca ([src/lib/cupom-matcher.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-matcher.ts)):** Exportada a função `removerMarcaDoTexto` e criada a limpeza automática de unidade solta no fim também sobre os nomes retornados pela IA, além de sugerir o setor específico correto (como Hortifruti ou Padaria) quando um produto já existente no catálogo estava salvo em setor genérico (Mercearia/Outros).
+- **Edição livre, limpeza automática e botão "Associar" ([src/app/mais/cupom/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/cupom/page.tsx)):** Os campos **Nome do produto (sem a marca)**, **Marca ou Sabor** e **Setor do mercado** agora ficam sempre visíveis e editáveis mesmo quando o item já deu match com um produto existente (atualizando o cadastro no banco ao gerar o carrinho), com remoção automática da marca ao preencher/editar e botão rápido **"Tirar marca"**, além dos novos botões **"Associar a produto existente"** e **"Associar a outro"** para vincular manualmente qualquer item da nota ao catálogo.
+
 
 
 
