@@ -72,6 +72,30 @@ export function dataHojeISO(): string {
   return `${ano}-${mes}-${dia}`;
 }
 
+/**
+ * Converte data YYYY-MM-DD para ISO ao meio-dia UTC, evitando virada de dia/mês por fuso horário
+ */
+export function dataInputParaISO(yyyyMmDd?: string | null): string {
+  const limpa = (yyyyMmDd || "").trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(limpa)) {
+    return `${limpa}T12:00:00.000Z`;
+  }
+  return new Date().toISOString();
+}
+
+/**
+ * Extrai YYYY-MM-DD de strings ISO ou datas brasileiras (dd/mm/aaaa [hh:mm]) para preencher inputs date
+ */
+export function extrairDataInput(valor?: string | null): string {
+  const bruto = (valor || "").trim();
+  if (!bruto) return dataHojeISO();
+  const matchIso = bruto.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (matchIso) return matchIso[1];
+  const matchBr = bruto.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (matchBr) return `${matchBr[3]}-${matchBr[2]}-${matchBr[1]}`;
+  return dataHojeISO();
+}
+
 export interface EstatisticasProduto {
   estimado: number | null;
   mediaPeriodo: number | null;

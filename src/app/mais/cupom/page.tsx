@@ -13,7 +13,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
-  ShoppingBag,
   Store,
   Tag,
   Trash2,
@@ -22,11 +21,20 @@ import {
   Check,
   X,
   Settings,
+  Calendar,
+  CreditCard,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
 import QrCodeScanner from "@/components/QrCodeScanner";
-import { formatarMoeda, parseDecimalBR } from "@/lib/format";
+import {
+  dataHojeISO,
+  dataInputParaISO,
+  extrairDataInput,
+  formatarDataBR,
+  formatarMoeda,
+  parseDecimalBR,
+} from "@/lib/format";
 import type { DadosCupomFiscal } from "@/lib/cupom-parser";
 import {
   correlacionarItensCupom,
@@ -36,13 +44,24 @@ import {
   type SugestaoMatchProduto,
 } from "@/lib/cupom-matcher";
 import {
+  carregarConfigIADoGrupo,
+  ehProdutoInternoSistema,
   lerConfigIA,
   MODELOS_IA_DISPONIVEIS,
-  salvarConfigIA,
+  salvarConfigIANoGrupo,
   temIAConfigurada,
   type ConfigIA,
 } from "@/lib/ia-config";
-import type { Market, Product, Sector } from "@/lib/types";
+import type { FormaPagamento, Market, Product, Sector } from "@/lib/types";
+
+const FORMAS_PAGAMENTO_CUPOM: FormaPagamento[] = [
+  "Pix",
+  "Crédito",
+  "Débito",
+  "Vale-alimentação",
+  "Dinheiro",
+  "Outro",
+];
 
 export default function ImportarCupomPage() {
   const router = useRouter();
@@ -85,9 +104,23 @@ export default function ImportarCupomPage() {
   const [gerandoCarrinho, setGerandoCarrinho] = useState(false);
   const [indiceEscolhendoProduto, setIndiceEscolhendoProduto] = useState<number | null>(null);
 
-  // Mantém preferência da IA sincronizada ao montar ou voltar da tela Mais
+  // Modal de finalização direta da compra pelo cupom (vai direto para Histórico)
+  const [modalFinalizarAberto, setModalFinalizarAberto] = useState(false);
+  const [nomeCompraFinal, setNomeCompraFinal] = useState("");
+  const [dataCompraFinal, setDataCompraFinal] = useState(dataHojeISO());
+  const [pagamentosCupom, setPagamentosCupom] = useState<
+    { id: string; forma_pagamento: FormaPagamento; valorTexto: string }[]
+  >([]);
+
+  // Mantém preferência da IA sincronizada com o grupo ao montar ou voltar da tela Mais
   useEffect(() => {
-    const atualizarConfig = () => setConfigIA(lerConfigIA());
+    const atualizarConfig = () => {
+      if (groupId) {
+        carregarConfigIADoGrupo(createClient(), groupId).then(setConfigIA);
+      } else {
+        setConfigIA(lerConfigIA());
+      }
+    };
     atualizarConfig();
     window.addEventListener("focus", atualizarConfig);
     window.addEventListener("storage", atualizarConfig);
@@ -95,7 +128,7 @@ export default function ImportarCupomPage() {
       window.removeEventListener("focus", atualizarConfig);
       window.removeEventListener("storage", atualizarConfig);
     };
-  }, []);
+  }, [groupId]);
 
   // Carrega produtos, setores, mercados e marcas históricas do grupo
   useEffect(() => {
@@ -149,7 +182,13 @@ export default function ImportarCupomPage() {
             .limit(500),
         ]);
 
-        setProdutos(prods || []);
+        const cfgGrupo = await carregarConfigIADoGrupo(supabase, gId);
+        setConfigIA(cfgGrupo);
+
+        const prodsFiltrados = ((prods as Product[]) || []).filter(
+          (p) => !ehProdutoInternoSistema(p.codigo_barras)
+        );
+        setProdutos(prodsFiltrados);
         setSetores(secs || []);
         setMercados(mercs || []);
 
@@ -174,10 +213,16 @@ export default function ImportarCupomPage() {
     carregarContexto();
   }, [router]);
 
-  function alternarIAAtivaRapido() {
+  async function alternarIAAtivaRapido() {
     if (!configIA.apiKey.trim()) return;
-    const atualizada = salvarConfigIA({ ativada: !configIA.ativada });
-    setConfigIA(atualizada);
+    if (groupId) {
+      const atualizada = await salvarConfigIANoGrupo(createClient(), groupId, {
+        ativada: !configIA.ativada,
+      });
+      setConfigIA(atualizada);
+    } else {
+      setConfigIA((prev) => ({ ...prev, ativada: !prev.ativada }));
+    }
   }
 
   // Processa a resposta do parser, consulta IA opcional e avança para a tabela comparativa
@@ -187,7 +232,9 @@ export default function ImportarCupomPage() {
       return;
     }
 
-    const cfgAtual = lerConfigIA();
+    const cfgAtual = groupId
+      ? await carregarConfigIADoGrupo(createClient(), groupId)
+      : lerConfigIA();
     setConfigIA(cfgAtual);
 
     let analiseIA: ResultadoIAItem[] | undefined;
@@ -521,8 +568,50 @@ export default function ImportarCupomPage() {
     );
   }
 
-  // Geração do Carrinho no Banco (Etapa 4)
-  async function handleGerarCarrinhoFinal() {
+  const itensConfirmados = itensRevisao.filter((i) => !i.itemCupom.descartar);
+  const totalConfirmadoCupom = itensConfirmados.reduce(
+    (acc, curr) => acc + (curr.itemCupom.valor_total || 0),
+    0
+  );
+  const somaPagamentosCupom = pagamentosCupom.reduce(
+    (acc, p) => acc + parseDecimalBR(p.valorTexto),
+    0
+  );
+
+  function abrirModalFinalizarCompra() {
+    if (itensConfirmados.length === 0) {
+      setErro("Selecione ao menos 1 item confirmado para finalizar a compra.");
+      return;
+    }
+    setErro(null);
+    const dataBase = extrairDataInput(dadosCupom?.data_emissao);
+    setDataCompraFinal(dataBase);
+    setNomeCompraFinal(`Compra Cupom (${formatarDataBR(dataBase)})`);
+    setPagamentosCupom([
+      {
+        id: `pag-${Date.now()}`,
+        forma_pagamento: "Pix",
+        valorTexto: totalConfirmadoCupom.toFixed(2).replace(".", ","),
+      },
+    ]);
+    setModalFinalizarAberto(true);
+  }
+
+  function adicionarPagamentoCupom() {
+    const restante = Math.max(0, totalConfirmadoCupom - somaPagamentosCupom);
+    setPagamentosCupom((prev) => [
+      ...prev,
+      {
+        id: `pag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        forma_pagamento: "Crédito",
+        valorTexto: restante > 0 ? restante.toFixed(2).replace(".", ",") : "",
+      },
+    ]);
+  }
+
+  // Finalização Direta da Compra pelo Cupom -> salva no Histórico (sem passar por /compra)
+  async function handleFinalizarCompraCupom(e: React.FormEvent) {
+    e.preventDefault();
     if (!groupId) return;
     setGerandoCarrinho(true);
     setErro(null);
@@ -554,23 +643,27 @@ export default function ImportarCupomPage() {
         mId = mercados[0].id;
       }
 
-      // 2. Processa cada item (cadastra novo se necessário e atualiza histórico)
+      // 2. Valida itens confirmados
       const itensValidos = itensRevisao.filter((i) => !i.itemCupom.descartar);
-
       if (itensValidos.length === 0) {
-        throw new Error("Nenhum item selecionado para o carrinho.");
+        throw new Error("Nenhum item selecionado para finalizar a compra.");
       }
 
-      // Cria o carrinho
-      const nomeCarrinho = `Compra Cupom ${dadosCupom?.data_emissao ? `(${dadosCupom.data_emissao.split(" ")[0]})` : ""}`;
+      const dataFinalISO = dataCompraFinal || dataHojeISO();
+      const nomeCarrinho =
+        nomeCompraFinal.trim() || `Compra Cupom (${formatarDataBR(dataFinalISO)})`;
+
+      // 3. Cria o carrinho já finalizado com a data do cupom/compra
       const { data: novoCart, error: errCart } = await supabase
         .from("carts")
         .insert({
           group_id: groupId,
           market_id: mId || null,
           criado_por: user.id,
-          nome: nomeCarrinho.trim(),
-          status: "planejado",
+          nome: nomeCarrinho,
+          status: "finalizado",
+          data_planejada: dataFinalISO,
+          finalizado_em: dataInputParaISO(dataFinalISO),
         })
         .select("id")
         .single();
@@ -578,34 +671,51 @@ export default function ImportarCupomPage() {
       if (errCart) throw errCart;
       const cartId = novoCart.id;
 
-      // Cadastra novos produtos e itens do carrinho
+      const mapaEmojiSetor = new Map(setores.map((s) => [s.id, s.emoji]));
+
+      // 4. Atualiza/cadastra produtos (salvando emoji), grava cart_items e histórico prices
       for (let i = 0; i < itensValidos.length; i++) {
         const itemRev = itensValidos[i];
         let produtoId = itemRev.produtoSugerido?.id;
+        const setorResolvidoId =
+          itemRev.setorSugeridoId ||
+          itemRev.produtoSugerido?.sector_id ||
+          setores[0]?.id ||
+          null;
+        const emojiResolvido =
+          itemRev.emojiSugerido?.trim() ||
+          (setorResolvidoId ? mapaEmojiSetor.get(setorResolvidoId) : null) ||
+          null;
 
         if (itemRev.ehMesmoProduto && produtoId) {
-          // Atualiza o nome (sem a marca) e o setor do produto existente no catálogo quando alterados
           const nomeFinal = (
             itemRev.nomeFormatadoNovo ||
             itemRev.produtoSugerido?.nome ||
             itemRev.itemCupom.descricao
           ).trim();
-          const setorId =
-            itemRev.setorSugeridoId ||
-            itemRev.produtoSugerido?.sector_id ||
-            setores[0]?.id ||
-            null;
+          const precisaAtualizarEmoji =
+            !itemRev.produtoSugerido?.emoji && Boolean(emojiResolvido);
 
           if (
             nomeFinal !== itemRev.produtoSugerido?.nome ||
-            setorId !== itemRev.produtoSugerido?.sector_id
+            setorResolvidoId !== itemRev.produtoSugerido?.sector_id ||
+            precisaAtualizarEmoji
           ) {
+            const payloadProd: {
+              nome: string;
+              sector_id: string | null;
+              emoji?: string | null;
+            } = {
+              nome: nomeFinal,
+              sector_id: setorResolvidoId,
+            };
+            if (precisaAtualizarEmoji && emojiResolvido) {
+              payloadProd.emoji = emojiResolvido;
+            }
+
             const { error: errUpdateProd } = await supabase
               .from("products")
-              .update({
-                nome: nomeFinal,
-                sector_id: setorId,
-              })
+              .update(payloadProd)
               .eq("id", produtoId)
               .eq("group_id", groupId);
 
@@ -617,14 +727,15 @@ export default function ImportarCupomPage() {
             }
           }
         } else {
-          // Se for novo produto (ou usuário optou por cadastrar como novo), busca ou insere
           const setorId = itemRev.setorSugeridoId || setores[0]?.id || null;
-          const nomeFinal = (itemRev.nomeFormatadoNovo || itemRev.itemCupom.descricao).trim();
+          const nomeFinal = (
+            itemRev.nomeFormatadoNovo || itemRev.itemCupom.descricao
+          ).trim();
 
-          // 1. Verifica se já existe um produto com este nome no grupo para evitar duplicações
+          // Verifica se já existe um produto com este nome no grupo para evitar duplicações
           const { data: prodExistente } = await supabase
             .from("products")
-            .select("id")
+            .select("id, emoji")
             .eq("group_id", groupId)
             .ilike("nome", nomeFinal)
             .limit(1)
@@ -632,8 +743,14 @@ export default function ImportarCupomPage() {
 
           if (prodExistente) {
             produtoId = prodExistente.id;
+            if (!prodExistente.emoji && emojiResolvido) {
+              await supabase
+                .from("products")
+                .update({ emoji: emojiResolvido })
+                .eq("id", prodExistente.id)
+                .eq("group_id", groupId);
+            }
           } else {
-            // 2. Insere novo produto (usando estritamente as colunas válidas da tabela products)
             const { data: prodCriado, error: errProd } = await supabase
               .from("products")
               .insert({
@@ -641,13 +758,16 @@ export default function ImportarCupomPage() {
                 sector_id: setorId,
                 nome: nomeFinal,
                 unidade: itemRev.itemCupom.unidade || "un",
+                emoji: emojiResolvido,
               })
               .select("id")
               .single();
 
             if (errProd) {
               console.error("Erro ao cadastrar produto:", errProd);
-              throw new Error(`Erro ao cadastrar produto "${nomeFinal}": ${errProd.message}`);
+              throw new Error(
+                `Erro ao cadastrar produto "${nomeFinal}": ${errProd.message}`
+              );
             }
 
             if (prodCriado) {
@@ -660,7 +780,6 @@ export default function ImportarCupomPage() {
           const precoUnitario =
             itemRev.itemCupom.valor_unitario > 0 ? itemRev.itemCupom.valor_unitario : null;
 
-          // 3. Insere no carrinho (cart_items: cart_id, group_id, product_id, quantidade, preco_estimado, preco_real, marca, marcado, ordem)
           const { data: cartItemCriado, error: errCartItem } = await supabase
             .from("cart_items")
             .insert({
@@ -671,7 +790,8 @@ export default function ImportarCupomPage() {
               preco_estimado: precoUnitario,
               preco_real: precoUnitario,
               marca: itemRev.marcaConfirmada.trim() || null,
-              marcado: true, // Já vem conferido da nota
+              atacado_aplicado: itemRev.ehAtacado,
+              marcado: true,
               ordem: i,
             })
             .select("id")
@@ -679,10 +799,11 @@ export default function ImportarCupomPage() {
 
           if (errCartItem) {
             console.error("Erro ao inserir item no carrinho:", errCartItem);
-            throw new Error(`Erro ao adicionar "${itemRev.itemCupom.descricao}" ao carrinho: ${errCartItem.message}`);
+            throw new Error(
+              `Erro ao adicionar "${itemRev.itemCupom.descricao}" à compra: ${errCartItem.message}`
+            );
           }
 
-          // 4. Grava histórico de preço na tabela prices (prices: group_id, product_id, market_id, valor, marca, tipo, cart_item_id)
           if (mId && precoUnitario && precoUnitario > 0) {
             await supabase.from("prices").insert({
               group_id: groupId,
@@ -691,16 +812,37 @@ export default function ImportarCupomPage() {
               valor: precoUnitario,
               marca: itemRev.marcaConfirmada.trim() || null,
               tipo: itemRev.ehAtacado ? "atacado" : "varejo",
+              quantidade_minima: 1,
+              data: dataFinalISO,
+              criado_por: user.id,
               cart_item_id: cartItemCriado?.id || null,
             });
           }
         }
       }
 
-      // Redireciona diretamente para a compra com o carrinho pronto!
-      router.push(`/compra?id=${cartId}`);
+      // 5. Registra as formas de pagamento selecionadas
+      const pagamentosValidos = pagamentosCupom
+        .map((p) => ({
+          cart_id: cartId,
+          group_id: groupId,
+          forma_pagamento: p.forma_pagamento,
+          valor: parseDecimalBR(p.valorTexto),
+        }))
+        .filter((p) => p.valor > 0);
+
+      if (pagamentosValidos.length > 0) {
+        const { error: errPag } = await supabase
+          .from("cart_payments")
+          .insert(pagamentosValidos);
+        if (errPag) throw errPag;
+      }
+
+      setModalFinalizarAberto(false);
+      router.push("/historico");
+      router.refresh();
     } catch (err: any) {
-      setErro(err.message || "Falha ao gerar o carrinho.");
+      setErro(err.message || "Falha ao finalizar a compra.");
       setGerandoCarrinho(false);
     }
   }
@@ -1459,40 +1601,36 @@ export default function ImportarCupomPage() {
               );
             })()}
 
-            {/* Barra Inferior Fixa de Conclusão / Geração do Carrinho */}
+            {/* Barra Inferior Fixa de Finalização da Compra */}
             <div className="fixed bottom-16 md:bottom-0 left-0 right-0 md:pl-64 bg-card/95 backdrop-blur-md border-t border-border p-3 sm:p-4 z-30 shadow-lg">
               <div className="max-w-md md:max-w-4xl lg:max-w-5xl mx-auto flex items-center justify-between gap-3">
                 <div className="flex flex-col min-w-0">
                   <span className="text-[11px] font-semibold text-text-muted truncate">
-                    {itensRevisao.filter((i) => !i.itemCupom.descartar).length}{" "}
-                    {itensRevisao.filter((i) => !i.itemCupom.descartar).length === 1
+                    {itensConfirmados.length}{" "}
+                    {itensConfirmados.length === 1
                       ? "item confirmado"
                       : "itens confirmados"}
                   </span>
                   <span className="text-base sm:text-lg font-extrabold text-text-main whitespace-nowrap">
-                    {formatarMoeda(
-                      itensRevisao
-                        .filter((i) => !i.itemCupom.descartar)
-                        .reduce((acc, curr) => acc + (curr.itemCupom.valor_total || 0), 0)
-                    )}
+                    {formatarMoeda(totalConfirmadoCupom)}
                   </span>
                 </div>
 
                 <button
                   type="button"
-                  onClick={handleGerarCarrinhoFinal}
-                  disabled={gerandoCarrinho}
-                  className="h-12 px-5 sm:px-8 rounded-2xl bg-primary text-white font-extrabold text-sm sm:text-base hover:bg-primary-hover shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 shrink-0"
+                  onClick={abrirModalFinalizarCompra}
+                  disabled={gerandoCarrinho || itensConfirmados.length === 0}
+                  className="h-12 px-5 sm:px-8 rounded-2xl bg-primary text-white font-extrabold text-sm sm:text-base hover:bg-primary-hover shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 shrink-0 disabled:opacity-60"
                 >
                   {gerandoCarrinho ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Gerando...</span>
+                      <span>Salvando...</span>
                     </>
                   ) : (
                     <>
-                      <ShoppingBag className="w-4 h-4" />
-                      <span>Gerar Carrinho</span>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Finalizar Compra</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
@@ -1502,6 +1640,184 @@ export default function ImportarCupomPage() {
           </div>
         )}
       </main>
+
+      {/* Modal de Finalização Direta do Cupom (Pagamento + Data -> Histórico) */}
+      {modalFinalizarAberto && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="w-full max-w-md max-h-[92dvh] overflow-y-auto bg-card rounded-t-[24px] md:rounded-2xl p-5 flex flex-col gap-4 shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-extrabold text-text-main">
+                  Finalizar compra do cupom
+                </h2>
+                <p className="text-xs text-text-muted">
+                  Confirme a data e a forma de pagamento para salvar no histórico.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !gerandoCarrinho && setModalFinalizarAberto(false)}
+                className="w-9 h-9 rounded-full bg-background border border-border flex items-center justify-center text-text-muted hover:text-text-main cursor-pointer shrink-0"
+                aria-label="Fechar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-primary-light/60 border border-primary/20 rounded-xl p-3 flex items-center justify-between">
+              <div className="text-xs font-semibold text-text-muted">
+                {itensConfirmados.length}{" "}
+                {itensConfirmados.length === 1 ? "item" : "itens"} confirmados
+              </div>
+              <div className="text-lg font-extrabold text-primary">
+                {formatarMoeda(totalConfirmadoCupom)}
+              </div>
+            </div>
+
+            <form onSubmit={handleFinalizarCompraCupom} className="flex flex-col gap-3.5">
+              <div>
+                <label className="text-xs font-semibold text-text-muted block mb-1">
+                  Nome da compra
+                </label>
+                <input
+                  type="text"
+                  value={nomeCompraFinal}
+                  onChange={(e) => setNomeCompraFinal(e.target.value)}
+                  placeholder="Ex.: Compra Cupom (14/11/2026)"
+                  required
+                  className="w-full h-11 px-3.5 rounded-xl bg-background border border-border text-sm font-medium focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5 mb-1">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Data da compra</span>
+                </label>
+                <input
+                  type="date"
+                  value={dataCompraFinal}
+                  onChange={(e) => setDataCompraFinal(e.target.value)}
+                  required
+                  className="w-full h-11 px-3.5 rounded-xl bg-background border border-border text-sm font-medium focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-text-muted flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Forma de pagamento</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={adicionarPagamentoCupom}
+                    className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Dividir pagamento</span>
+                  </button>
+                </div>
+
+                {pagamentosCupom.map((pag, idx) => (
+                  <div key={pag.id} className="flex items-center gap-2">
+                    <select
+                      value={pag.forma_pagamento}
+                      onChange={(e) => {
+                        const novaForma = e.target.value as FormaPagamento;
+                        setPagamentosCupom((prev) =>
+                          prev.map((row) =>
+                            row.id === pag.id
+                              ? { ...row, forma_pagamento: novaForma }
+                              : row
+                          )
+                        );
+                      }}
+                      className="flex-1 h-11 px-3 rounded-xl bg-background border border-border text-sm font-medium focus:outline-none focus:border-primary"
+                    >
+                      {FORMAS_PAGAMENTO_CUPOM.map((fp) => (
+                        <option key={fp} value={fp}>
+                          {fp}
+                        </option>
+                      ))}
+                    </select>
+
+                    <div className="relative w-32 shrink-0">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted">
+                        R$
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={pag.valorTexto}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPagamentosCupom((prev) =>
+                            prev.map((row) =>
+                              row.id === pag.id ? { ...row, valorTexto: val } : row
+                            )
+                          );
+                        }}
+                        placeholder="0,00"
+                        className="w-full h-11 pl-8 pr-3 rounded-xl bg-background border border-border text-sm font-bold text-text-main focus:outline-none focus:border-primary"
+                      />
+                    </div>
+
+                    {pagamentosCupom.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPagamentosCupom((prev) =>
+                            prev.filter((_, i) => i !== idx)
+                          )
+                        }
+                        className="w-10 h-11 rounded-xl border border-border text-text-muted hover:text-danger flex items-center justify-center shrink-0 cursor-pointer"
+                        aria-label="Remover forma de pagamento"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {Math.abs(somaPagamentosCupom - totalConfirmadoCupom) > 0.05 && (
+                  <p className="text-[11px] font-medium text-warning">
+                    Soma dos pagamentos ({formatarMoeda(somaPagamentosCupom)}) está diferente do total dos itens ({formatarMoeda(totalConfirmadoCupom)}). Você pode ajustar ou salvar assim mesmo se houve desconto/arredondamento.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalFinalizarAberto(false)}
+                  disabled={gerandoCarrinho}
+                  className="flex-1 h-12 rounded-xl border border-border font-bold text-sm text-text-muted hover:text-text-main cursor-pointer"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="submit"
+                  disabled={gerandoCarrinho}
+                  className="flex-[1.6] h-12 rounded-xl bg-primary hover:bg-primary-hover text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-sm cursor-pointer disabled:opacity-60"
+                >
+                  {gerandoCarrinho ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Salvando compra...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Confirmar e salvar</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>

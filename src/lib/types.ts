@@ -45,6 +45,9 @@ export interface GroupSettings {
   metodo_preco: MetodoPreco;
   meses_media: number;
   mercado_padrao_id: string | null;
+  ia_ativada?: boolean;
+  ia_api_key?: string | null;
+  ia_modelo?: string | null;
   atualizado_em: string;
 }
 
@@ -116,7 +119,9 @@ export interface CartItem {
   id: string;
   cart_id: string;
   group_id: string;
-  product_id: string;
+  product_id: string | null;
+  descricao_avulsa?: string | null;
+  sector_id_avulso?: string | null;
   marca: string | null;
   quantidade: number;
   preco_estimado: number | null;

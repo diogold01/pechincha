@@ -253,8 +253,8 @@ export default function LiveMarketMode({
   // Enriquecimento de cada item do carrinho (preço real vs estimado)
   const itensEnriquecidos = useMemo(() => {
     return itensCarrinho.map((item) => {
-      const produto = mapaProdutos.get(item.product_id);
-      const listaPrecos = precosPorProduto.get(item.product_id) || [];
+      const produto = item.product_id ? mapaProdutos.get(item.product_id) : undefined;
+      const listaPrecos = item.product_id ? precosPorProduto.get(item.product_id) || [] : [];
       const calc = calcularEstimativaItemCarrinho(
         listaPrecos,
         Number(item.quantidade),
@@ -324,7 +324,8 @@ export default function LiveMarketMode({
   const gruposPorSetor = useMemo(() => {
     const mapa = new Map<string, typeof itensEnriquecidos>();
     itensEnriquecidos.forEach((enriq) => {
-      const secId = enriq.produto?.sector_id || "sem_setor";
+      const secId =
+        enriq.item.sector_id_avulso || enriq.produto?.sector_id || "sem_setor";
       const lista = mapa.get(secId) || [];
       lista.push(enriq);
       mapa.set(secId, lista);
@@ -616,8 +617,8 @@ export default function LiveMarketMode({
     setNovaMarcaDigitada("");
     setMostrarInputNovaMarca(false);
     setMostrarModalRenomearProduto(false);
-    const prod = mapaProdutos.get(item.product_id);
-    setNomeRenomearProduto(prod?.nome || "");
+    const prod = item.product_id ? mapaProdutos.get(item.product_id) : undefined;
+    setNomeRenomearProduto(prod?.nome || item.descricao_avulsa || "");
     setUnidadeRenomearProduto(prod?.unidade || "un");
     setQtdTextoSheet(String(Number(item.quantidade)).replace(".", ","));
     setEditandoQtdManual(false);
@@ -656,7 +657,7 @@ export default function LiveMarketMode({
 
   function alterarQtdNoSheet(delta: number) {
     const atual = parseDecimalBR(qtdTextoSheet) || 1;
-    const prod = itemPrecoAtivo
+    const prod = itemPrecoAtivo?.product_id
       ? mapaProdutos.get(itemPrecoAtivo.product_id)
       : null;
     const ehPeso = prod?.unidade === "kg" || !Number.isInteger(atual);
@@ -668,7 +669,9 @@ export default function LiveMarketMode({
   // Estatísticas para o chip discreto de comparação no Bottom Sheet ("Média de 3 meses: R$ 47,10 · ▲ 6%")
   const comparacaoItemAtivo = useMemo(() => {
     if (!itemPrecoAtivo) return null;
-    const lista = precosPorProduto.get(itemPrecoAtivo.product_id) || [];
+    const lista = itemPrecoAtivo.product_id
+      ? precosPorProduto.get(itemPrecoAtivo.product_id) || []
+      : [];
     const stats = calcularEstatisticasPreco(lista, {
       metodo: settings?.metodo_preco || "media",
       mesesMedia: settings?.meses_media || 3,
@@ -719,6 +722,7 @@ export default function LiveMarketMode({
     if (!novoNome) return;
 
     const prodId = itemPrecoAtivo.product_id;
+    if (!prodId) return;
     const novaUnidade = unidadeRenomearProduto || "un";
 
     // Fecha o teclado nativo do celular antes de voltar ao teclado 3x4
@@ -828,20 +832,21 @@ export default function LiveMarketMode({
       atacado_aplicado: usarAtacado,
     };
 
-    const payloadPreco = marketIdCarrinho
-      ? {
-          group_id: groupId,
-          product_id: itemSalvo.product_id,
-          market_id: marketIdCarrinho,
-          marca: marcaFinal,
-          valor: precoUnitarioFinal,
-          tipo: usarAtacado ? "atacado" : "varejo",
-          quantidade_minima: usarAtacado ? qtdMinAtacadoNum : 1,
-          data: dataHojeISO(),
-          criado_por: userId,
-          cart_item_id: itemSalvo.id,
-        }
-      : null;
+    const payloadPreco =
+      marketIdCarrinho && itemSalvo.product_id
+        ? {
+            group_id: groupId,
+            product_id: itemSalvo.product_id,
+            market_id: marketIdCarrinho,
+            marca: marcaFinal,
+            valor: precoUnitarioFinal,
+            tipo: usarAtacado ? "atacado" : "varejo",
+            quantidade_minima: usarAtacado ? qtdMinAtacadoNum : 1,
+            data: dataHojeISO(),
+            criado_por: userId,
+            cart_item_id: itemSalvo.id,
+          }
+        : null;
 
     if (typeof window !== "undefined" && !window.navigator.onLine) {
       let totalFila = await enfileirarOperacaoOffline({
@@ -897,6 +902,7 @@ export default function LiveMarketMode({
 
       // Se o usuário preencheu um preço de atacado mas comprou quantidade de varejo, registra também a dica de atacado
       if (
+        itemSalvo.product_id &&
         ehAtacadoSheet &&
         !usarAtacado &&
         precoAtacadoNum > 0 &&
@@ -1295,11 +1301,12 @@ export default function LiveMarketMode({
       // 1. Grava os preços reais no histórico `prices` evitando duplicar (índice único cart_item_id)
       if (marketIdCarrinho) {
         const itensPegos = itensEnriquecidos.filter(
-          (x) => x.item.marcado && x.precoEfetivoUnit > 0
+          (x) => Boolean(x.item.product_id) && x.item.marcado && x.precoEfetivoUnit > 0
         );
 
         for (const enriq of itensPegos) {
           const { item, precoEfetivoUnit } = enriq;
+          if (!item.product_id) continue;
 
           // Verifica se já existe preço com este cart_item_id
           const { data: existente } = await supabase
@@ -1382,12 +1389,14 @@ export default function LiveMarketMode({
     }
   }
 
-  const produtoAtivoSheet = itemPrecoAtivo
+  const produtoAtivoSheet = itemPrecoAtivo?.product_id
     ? mapaProdutos.get(itemPrecoAtivo.product_id) || null
     : null;
   const setorAtivoSheet =
     produtoAtivoSheet?.sector_id
       ? mapaSetores.get(produtoAtivoSheet.sector_id) || null
+      : itemPrecoAtivo?.sector_id_avulso
+      ? mapaSetores.get(itemPrecoAtivo.sector_id_avulso) || null
       : null;
 
   return (
@@ -1652,8 +1661,8 @@ export default function LiveMarketMode({
                           onClick={() => handleAlternarMarcado(enriq)}
                           aria-label={
                             item.marcado
-                              ? `Desmarcar ${produto?.nome}`
-                              : `Marcar ${produto?.nome} como pego`
+                              ? `Desmarcar ${item.descricao_avulsa || produto?.nome || "item"}`
+                              : `Marcar ${item.descricao_avulsa || produto?.nome || "item"} como pego`
                           }
                           className="w-8 h-8 flex items-center justify-center shrink-0 cursor-pointer"
                         >
@@ -1683,7 +1692,7 @@ export default function LiveMarketMode({
                           className="flex-1 min-w-0 cursor-pointer"
                         >
                           <div className="text-[15px] font-semibold text-text-main truncate">
-                            {produto?.nome || "Produto"}
+                            {item.descricao_avulsa || produto?.nome || "Produto"}
                           </div>
                           <div className="text-[12px] text-text-muted truncate">
                             {item.marcado ? (

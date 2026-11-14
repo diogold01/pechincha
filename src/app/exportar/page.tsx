@@ -18,6 +18,10 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
 import BottomNav from "@/components/BottomNav";
 import { formatarDataBR } from "@/lib/format";
+import {
+  CODIGO_BARRAS_CONFIG_IA,
+  ehProdutoInternoSistema,
+} from "@/lib/ia-config";
 import type {
   Cart,
   CartItem,
@@ -141,7 +145,11 @@ export default function ExportarBackupPage() {
       setMercados((mktData as Market[]) || []);
       setSetores((secData as Sector[]) || []);
       setOrdemSetores((ordData as MarketSectorOrder[]) || []);
-      setProdutos((prodData as Product[]) || []);
+      setProdutos(
+        ((prodData as Product[]) || []).filter(
+          (p) => p.codigo_barras !== CODIGO_BARRAS_CONFIG_IA
+        )
+      );
       setPrecos((prcData as Price[]) || []);
       setCarrinhos((cartsData as Cart[]) || []);
       setItensCarrinho((itemsData as CartItem[]) || []);
@@ -243,9 +251,10 @@ export default function ExportarBackupPage() {
         const sub = unit * Number(item.quantidade || 0);
         totalCompra += sub;
 
-        const prod = mapaProdutos.get(item.product_id);
+        const prod = item.product_id ? mapaProdutos.get(item.product_id) : undefined;
+        const setorId = item.sector_id_avulso || prod?.sector_id;
         const nomeSetor =
-          (prod?.sector_id && mapaSetores.get(prod.sector_id)) || "Outros";
+          (setorId && mapaSetores.get(setorId)) || "Avulso / Sem setor";
         subtotalPorSetor.set(
           nomeSetor,
           (subtotalPorSetor.get(nomeSetor) || 0) + sub
@@ -330,9 +339,10 @@ export default function ExportarBackupPage() {
             ? Number(item.preco_real)
             : Number(item.preco_estimado || 0);
         totalCompra += unit * Number(item.quantidade || 0);
-        const prod = mapaProdutos.get(item.product_id);
+        const prod = item.product_id ? mapaProdutos.get(item.product_id) : undefined;
+        const setorId = item.sector_id_avulso || prod?.sector_id;
         const nomeSetor =
-          (prod?.sector_id && mapaSetores.get(prod.sector_id)) || "Outros";
+          (setorId && mapaSetores.get(setorId)) || "Avulso / Sem setor";
         setoresUsados.add(nomeSetor);
       }
 
@@ -369,7 +379,9 @@ export default function ExportarBackupPage() {
     baixarArquivoCsv(
       "backup_produtos.csv",
       ["ID", "Nome", "Setor", "Unidade", "Emoji", "Ativo", "Criado Em"],
-      produtos.map((p) => [
+      produtos
+        .filter((p) => !ehProdutoInternoSistema(p.codigo_barras))
+        .map((p) => [
         p.id,
         p.nome,
         (p.sector_id && mapaSetores.get(p.sector_id)) || "",
@@ -442,14 +454,20 @@ export default function ExportarBackupPage() {
   }
 
   function handleExportarBackupJsonCompleto() {
+    const configuracoesSeguras = settings
+      ? {
+          ...settings,
+          ia_api_key: settings.ia_api_key ? "[OCULTADA NO BACKUP]" : null,
+        }
+      : null;
     const pacote = {
       exportado_em: new Date().toISOString(),
       grupo,
-      configuracoes: settings,
+      configuracoes: configuracoesSeguras,
       mercados,
       setores,
       ordem_setores_mercado: ordemSetores,
-      produtos,
+      produtos: produtos.filter((p) => !ehProdutoInternoSistema(p.codigo_barras)),
       precos,
       carrinhos,
       itens_carrinho: itensCarrinho,

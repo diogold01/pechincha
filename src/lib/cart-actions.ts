@@ -125,15 +125,35 @@ export async function repetirCarrinhoNoBanco(params: {
     precosPorProduto.set(p.product_id, lista);
   }
 
-  // Deduplica por product_id + marca caso o carrinho antigo tivesse itens repetidos
-  const itensValidos = itensOrigem.filter((item) =>
-    idsProdutosAtivos.has(item.product_id)
+  // Inclui itens de produtos ativos e itens avulsos válidos
+  const itensValidos = itensOrigem.filter(
+    (item) =>
+      (item.product_id !== null && idsProdutosAtivos.has(item.product_id)) ||
+      (item.product_id === null && Boolean(item.descricao_avulsa?.trim()))
   );
 
   if (itensValidos.length > 0) {
     const novosItensPayload = itensValidos.map((item, idx) => {
-      const listaPrecos = precosPorProduto.get(item.product_id) || [];
       const qtd = Number(item.quantidade) > 0 ? Number(item.quantidade) : 1;
+
+      if (!item.product_id) {
+        return {
+          cart_id: novoCartObj.id,
+          group_id: groupId,
+          product_id: null,
+          descricao_avulsa: item.descricao_avulsa || null,
+          sector_id_avulso: item.sector_id_avulso || null,
+          marca: item.marca || null,
+          quantidade: qtd,
+          preco_estimado: item.preco_real ?? item.preco_estimado ?? null,
+          preco_real: null,
+          marcado: false,
+          atacado_aplicado: false,
+          ordem: idx + 1,
+        };
+      }
+
+      const listaPrecos = precosPorProduto.get(item.product_id) || [];
       const estimativa = calcularEstimativaItemCarrinho(listaPrecos, qtd, {
         metodo: settings?.metodo_preco || "media",
         mesesMedia: settings?.meses_media || 3,
