@@ -16,9 +16,17 @@ import {
   Trash2,
   Pencil,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
+import CatalogAIFormatterModal from "@/components/CatalogAIFormatterModal";
+import {
+  carregarConfigIADoGrupo,
+  ehProdutoInternoSistema,
+  lerConfigIA,
+  type ConfigIA,
+} from "@/lib/ia-config";
 import {
   calcularEstatisticasPreco,
   dataHojeISO,
@@ -82,6 +90,8 @@ export default function ProdutosPage() {
 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [configIA, setConfigIA] = useState<ConfigIA>(() => lerConfigIA());
+  const [modalOrganizarIAAberto, setModalOrganizarIAAberto] = useState(false);
 
   const carregarDados = useCallback(async () => {
     setCarregando(true);
@@ -148,8 +158,15 @@ export default function ProdutosPage() {
       setSettings((stData as GroupSettings) || null);
       setSetores((secData as Sector[]) || []);
       setMercados((mktData as Market[]) || []);
-      setProdutos((prodData as Product[]) || []);
+      setProdutos(
+        ((prodData as Product[]) || []).filter(
+          (p) => !ehProdutoInternoSistema(p.codigo_barras)
+        )
+      );
       setPrecos((prcData as Price[]) || []);
+
+      const cfgIA = await carregarConfigIADoGrupo(supabase, gId);
+      setConfigIA(cfgIA);
     } catch {
       setErro("Erro ao carregar os produtos.");
     } finally {
@@ -478,8 +495,8 @@ export default function ProdutosPage() {
     <div className="min-h-screen flex flex-col bg-background text-text-main pb-28 md:pb-8 md:pl-64">
       <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-4">
         {/* Cabeçalho */}
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
             <div className="text-[13px] text-text-muted font-medium">
               Catálogo e Histórico de Preços
             </div>
@@ -487,14 +504,28 @@ export default function ProdutosPage() {
               Produtos
             </h1>
           </div>
-          <button
-            type="button"
-            onClick={abrirNovoProduto}
-            className="h-11 px-4 rounded-btn bg-primary hover:bg-primary-hover text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo produto</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {produtos.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setModalOrganizarIAAberto(true)}
+                className="h-11 px-3 sm:px-3.5 rounded-btn bg-card border border-border hover:border-primary text-primary font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Formatar nomes, tirar marcas e sugerir ícones com IA"
+              >
+                <Sparkles className="w-4 h-4 shrink-0" />
+                <span className="sm:hidden">IA</span>
+                <span className="hidden sm:inline">Organizar com IA</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={abrirNovoProduto}
+              className="h-11 px-3.5 sm:px-4 rounded-btn bg-primary hover:bg-primary-hover text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span>Novo produto</span>
+            </button>
+          </div>
         </div>
 
         {/* Barra de Busca Instantânea */}
@@ -1424,6 +1455,20 @@ export default function ProdutosPage() {
           <option key={m} value={m} />
         ))}
       </datalist>
+
+      {modalOrganizarIAAberto && groupId && (
+        <CatalogAIFormatterModal
+          groupId={groupId}
+          produtos={produtos}
+          setores={setores}
+          marcasConhecidas={marcasExistentes}
+          configIAInicial={configIA}
+          onClose={() => setModalOrganizarIAAberto(false)}
+          onSaved={async () => {
+            await carregarDados();
+          }}
+        />
+      )}
 
       <BottomNav />
     </div>

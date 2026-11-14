@@ -252,6 +252,13 @@ Este arquivo registra o que foi feito em cada etapa do desenvolvimento do app, e
 - **4. Finalização direta do Cupom Fiscal para o Histórico ([src/app/mais/cupom/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/mais/cupom/page.tsx)):** Mantida a tela completa de revisão do cupom e substituído o redirecionamento intermediário para a tela Ao Vivo pelo botão **Finalizar Compra**, que abre um modal para confirmar data e formas de pagamento (inclusive pagamento dividido) e grava a compra já finalizada direto no Histórico e no orçamento mensal.
 - **5. Edição de compras finalizadas no Histórico ([src/components/EditFinalizedCartModal.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/EditFinalizedCartModal.tsx), [src/app/historico/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/historico/page.tsx)):** Adicionado o botão **Editar** em cada compra do Histórico, permitindo alterar nome, mercado, data, formas de pagamento, quantidades, preços, marcas, adicionar/remover itens e trocar o setor de qualquer item (atualizando também o setor padrão do produto no catálogo para futuras compras).
 
+---
+
+## Organizador do Catálogo com IA na tela de Produtos
+- **Ação em lote na API de IA ([src/app/api/cupom/ia/route.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/api/cupom/ia/route.ts)):** Adicionada a ação `formatar_catalogo`, que analisa produtos já cadastrados em blocos pequenos e sugere nome padronizado em português (removendo marca e abreviações/unidades soltas), marca detectada, setor sugerido e ícone (emoji) específico.
+- **Revisão Antes → Depois e unificação sem duplicação ([src/components/CatalogAIFormatterModal.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/components/CatalogAIFormatterModal.tsx), [src/app/produtos/page.tsx](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/app/produtos/page.tsx), [src/lib/cupom-matcher.ts](file:///c:/Users/DIOGO/Documents/📁%20Projetos/Pechincha/src/lib/cupom-matcher.ts)):** Adicionado o botão **Organizar com IA** na tela de Produtos usando a chave compartilhada do grupo (com `Gemini 3.5 Flash Lite` pré-selecionado para aproveitar a cota e processamento de 40 em 40 itens). O usuário revisa, edita ou desmarca qualquer sugestão antes de aplicar, atualizando os produtos pelo próprio ID e unificando histórico de preços e compras caso dois produtos fiquem com o mesmo nome após remover a marca.
+
+
 
 
 

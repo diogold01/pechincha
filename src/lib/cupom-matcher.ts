@@ -315,7 +315,7 @@ export function resolverSetorSugerido(
   return obterSetorFallback(setores);
 }
 
-function inferirEmojiPorNome(nome: string, setorFallback?: Sector | null): string | undefined {
+export function inferirEmojiPorNome(nome: string, setorFallback?: Sector | null): string | undefined {
   const n = normalizarTexto(nome);
   if (/\b(pao|frances|bisnaga|panetone|bolo|rosca)\b/.test(n)) return "🥖";
   if (/\b(carne|bov|peixinho|alcatra|patinho|picanha|costela|bife)\b/.test(n)) return "🥩";
