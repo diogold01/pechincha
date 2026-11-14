@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS public.group_settings (
   metodo_preco text NOT NULL DEFAULT 'media' CHECK (metodo_preco IN ('media', 'ultimo', 'menor')),
   meses_media integer NOT NULL DEFAULT 3 CHECK (meses_media >= 1 AND meses_media <= 24),
   mercado_padrao_id uuid NULL REFERENCES public.markets(id) ON DELETE SET NULL,
+  ia_ativada boolean NOT NULL DEFAULT false,
+  ia_api_key text NULL,
+  ia_modelo text NOT NULL DEFAULT 'gemini-3.8-flash',
   atualizado_em timestamptz NOT NULL DEFAULT now()
 );
 
@@ -137,7 +140,9 @@ CREATE TABLE IF NOT EXISTS public.cart_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   cart_id uuid NOT NULL REFERENCES public.carts(id) ON DELETE CASCADE,
   group_id uuid NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
-  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE RESTRICT,
+  product_id uuid NULL REFERENCES public.products(id) ON DELETE RESTRICT,
+  descricao_avulsa text NULL,
+  sector_id_avulso uuid NULL REFERENCES public.sectors(id) ON DELETE SET NULL,
   marca text NULL,
   quantidade numeric(12, 3) NOT NULL DEFAULT 1 CHECK (quantidade > 0),
   preco_estimado numeric(12, 2) NULL CHECK (preco_estimado IS NULL OR preco_estimado >= 0),
@@ -145,7 +150,10 @@ CREATE TABLE IF NOT EXISTS public.cart_items (
   marcado boolean NOT NULL DEFAULT false,
   atacado_aplicado boolean NOT NULL DEFAULT false,
   ordem integer NOT NULL DEFAULT 0,
-  atualizado_em timestamptz NOT NULL DEFAULT now()
+  atualizado_em timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT chk_cart_items_produto_ou_avulso CHECK (
+    product_id IS NOT NULL OR char_length(trim(coalesce(descricao_avulsa, ''))) > 0
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_cart_items_cart_id ON public.cart_items(cart_id);
@@ -233,12 +241,25 @@ AS $$
 DECLARE
   v_cart_group uuid;
   v_product_group uuid;
+  v_sector_group uuid;
 BEGIN
   SELECT group_id INTO v_cart_group FROM public.carts WHERE id = NEW.cart_id;
-  SELECT group_id INTO v_product_group FROM public.products WHERE id = NEW.product_id;
+  IF v_cart_group IS NULL THEN
+    RAISE EXCEPTION 'Carrinho inválido.';
+  END IF;
 
-  IF v_cart_group IS NULL OR v_product_group IS NULL OR v_cart_group <> v_product_group THEN
-    RAISE EXCEPTION 'Carrinho e produto devem pertencer ao mesmo grupo.';
+  IF NEW.product_id IS NOT NULL THEN
+    SELECT group_id INTO v_product_group FROM public.products WHERE id = NEW.product_id;
+    IF v_product_group IS NULL OR v_cart_group <> v_product_group THEN
+      RAISE EXCEPTION 'Carrinho e produto devem pertencer ao mesmo grupo.';
+    END IF;
+  END IF;
+
+  IF NEW.sector_id_avulso IS NOT NULL THEN
+    SELECT group_id INTO v_sector_group FROM public.sectors WHERE id = NEW.sector_id_avulso;
+    IF v_sector_group IS NULL OR v_cart_group <> v_sector_group THEN
+      RAISE EXCEPTION 'Carrinho e setor avulso devem pertencer ao mesmo grupo.';
+    END IF;
   END IF;
 
   NEW.group_id := v_cart_group;

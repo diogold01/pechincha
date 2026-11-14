@@ -11,6 +11,7 @@ export interface ResultadoIAItem {
   nome_limpo: string;
   marca: string;
   setor: string;
+  emoji?: string;
 }
 
 export interface OpcoesCorrelacaoCupom {
@@ -26,6 +27,7 @@ export interface SugestaoMatchProduto {
   ehAtacado: boolean;
   marcaConfirmada: string;
   setorSugeridoId?: string | null;
+  emojiSugerido?: string;
   nomeFormatadoNovo: string;
   precoDigitadoTexto?: string;
   origemSugestao?: "ia" | "local";
@@ -313,6 +315,34 @@ export function resolverSetorSugerido(
   return obterSetorFallback(setores);
 }
 
+function inferirEmojiPorNome(nome: string, setorFallback?: Sector | null): string | undefined {
+  const n = normalizarTexto(nome);
+  if (/\b(pao|frances|bisnaga|panetone|bolo|rosca)\b/.test(n)) return "🥖";
+  if (/\b(carne|bov|peixinho|alcatra|patinho|picanha|costela|bife)\b/.test(n)) return "🥩";
+  if (/\b(frango|filezinho|sobrecoxa|asa|coxinha|peito)\b/.test(n)) return "🍗";
+  if (/\b(ling|linguica|salsicha|calabresa|bacon)\b/.test(n)) return "🌭";
+  if (/\b(leite|iogurte|danone|manteiga)\b/.test(n)) return "🥛";
+  if (/\b(queijo|mussarela|requeijao|parmesao)\b/.test(n)) return "🧀";
+  if (/\b(ovo|ovos)\b/.test(n)) return "🥚";
+  if (/\b(limao|lima)\b/.test(n)) return "🍋";
+  if (/\b(banana)\b/.test(n)) return "🍌";
+  if (/\b(batata)\b/.test(n)) return "🥔";
+  if (/\b(cenoura)\b/.test(n)) return "🥕";
+  if (/\b(uva)\b/.test(n)) return "🍇";
+  if (/\b(coco)\b/.test(n)) return "🥥";
+  if (/\b(tomate)\b/.test(n)) return "🍅";
+  if (/\b(maca|laranja|chuchu|alface|verdura|legume)\b/.test(n)) return "🥬";
+  if (/\b(racao|pet|cachorro|gato)\b/.test(n)) return "🐶";
+  if (/\b(papel higienico)\b/.test(n)) return "🧻";
+  if (/\b(saco|lixo|sabao|detergente|cloro|desinfetante|amaciante|limpeza)\b/.test(n)) return "🧽";
+  if (/\b(lasanha|macarrao|espaguete|pizza)\b/.test(n)) return "🍝";
+  if (/\b(arroz)\b/.test(n)) return "🍚";
+  if (/\b(cafe)\b/.test(n)) return "☕";
+  if (/\b(cerveja)\b/.test(n)) return "🍺";
+  if (/\b(refrigerante|suco|guarana|coca|pepsi|agua)\b/.test(n)) return "🥤";
+  return setorFallback?.emoji || undefined;
+}
+
 /**
  * Cruza a lista de itens do cupom com os produtos cadastrados no banco,
  * aceitando opcionalmente o resultado da IA e marcas do histórico do grupo.
@@ -404,6 +434,11 @@ export function correlacionarItensCupom(
           : melhorProduto.sector_id
         : setorResolvido?.id || null;
 
+    const emojiIA = typeof itemIA?.emoji === "string" ? itemIA.emoji.trim() : "";
+    const setorFinalObj = setores.find((s) => s.id === setorFinalId) || setorResolvido;
+    const emojiSugerido =
+      emojiIA || inferirEmojiPorNome(`${nomeLimpoFinal} ${item.descricao}`, setorFinalObj);
+
     return {
       itemCupom: item,
       produtoSugerido: ehMesmo ? melhorProduto : null,
@@ -412,6 +447,7 @@ export function correlacionarItensCupom(
       ehAtacado: Boolean(item.eh_atacado),
       marcaConfirmada: marcaFinal,
       setorSugeridoId: setorFinalId,
+      emojiSugerido,
       nomeFormatadoNovo: nomeLimpoFinal,
       precoDigitadoTexto:
         item.valor_unitario > 0

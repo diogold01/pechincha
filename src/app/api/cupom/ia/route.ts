@@ -8,6 +8,7 @@ export interface ItemAnalisadoIA {
   nome_limpo: string;
   marca: string;
   setor: string;
+  emoji?: string;
 }
 
 /**
@@ -49,7 +50,7 @@ async function chamarGemini(
     },
     body: JSON.stringify(payload),
     cache: "no-store",
-    signal: AbortSignal.timeout(18000),
+    signal: AbortSignal.timeout(45000),
   });
 }
 
@@ -131,6 +132,7 @@ export async function POST(req: NextRequest) {
         setoresDisponiveis.length > 0
           ? `- setor: escolha exatamente um dos nomes da lista de setores disponíveis (${setoresDisponiveis.join(", ")}), ou '' se nenhum combinar.`
           : "- setor: sugira um setor comum de mercado (Hortifruti, Açougue, Padaria, Laticínios, Mercearia, Bebidas, Limpeza, Higiene, Congelados, Pet).",
+        "- emoji: um único emoji específico que represente bem o produto (ex: '🥖' para Pão Francês, '🥩' para Carne, '🍋' para Limão, '🧻' para Papel Higiênico, '🐶' para Ração, '🍝' para Lasanha).",
         "",
         "Itens:",
         listaNumerada,
@@ -152,8 +154,9 @@ export async function POST(req: NextRequest) {
                     nome_limpo: { type: "STRING" },
                     marca: { type: "STRING" },
                     setor: { type: "STRING" },
+                    emoji: { type: "STRING" },
                   },
-                  required: ["indice", "nome_limpo", "marca", "setor"],
+                  required: ["indice", "nome_limpo", "marca", "setor", "emoji"],
                 },
               },
             },

@@ -14,11 +14,16 @@ import {
   Trash2,
   AlertCircle,
   ShoppingBag,
+  Pencil,
+  Plus,
 } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
 import BottomNav from "@/components/BottomNav";
+import AvulsoCartModal from "@/components/AvulsoCartModal";
+import EditFinalizedCartModal from "@/components/EditFinalizedCartModal";
 import { repetirCarrinhoNoBanco } from "@/lib/cart-actions";
+import { CODIGO_BARRAS_CONFIG_IA } from "@/lib/ia-config";
 import { formatarDataBR, formatarDataCurtaBR, formatarMoeda } from "@/lib/format";
 import type {
   Cart,
@@ -50,6 +55,8 @@ export default function HistoricoCarrinhosPage() {
     string | null
   >(null);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
+  const [modalAvulsoAberto, setModalAvulsoAberto] = useState(false);
+  const [cartEditando, setCartEditando] = useState<Cart | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const carregarHistorico = useCallback(async () => {
@@ -116,7 +123,11 @@ export default function HistoricoCarrinhosPage() {
       setPagamentos((payData as CartPayment[]) || []);
       setMercados((mktData as Market[]) || []);
       setSetores((secData as Sector[]) || []);
-      setProdutos((prodData as Product[]) || []);
+      setProdutos(
+        ((prodData as Product[]) || []).filter(
+          (p) => p.codigo_barras !== CODIGO_BARRAS_CONFIG_IA
+        )
+      );
     } catch {
       setErro("Não foi possível carregar o histórico de carrinhos.");
     } finally {
@@ -212,22 +223,35 @@ export default function HistoricoCarrinhosPage() {
     <div className="min-h-screen flex flex-col bg-background text-text-main pb-28 md:pb-8 md:pl-64">
       <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-4">
         {/* Cabeçalho */}
-        <div className="flex items-center gap-3">
-          <Link
-            href="/mais"
-            className="w-11 h-11 rounded-full bg-card border border-border flex items-center justify-center text-text-main hover:border-primary transition-colors shrink-0"
-            aria-label="Voltar para Mais"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <div className="text-[13px] text-text-muted font-medium">
-              Compras finalizadas
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link
+              href="/mais"
+              className="w-11 h-11 rounded-full bg-card border border-border flex items-center justify-center text-text-main hover:border-primary transition-colors shrink-0"
+              aria-label="Voltar para Mais"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <div className="min-w-0">
+              <div className="text-[13px] text-text-muted font-medium">
+                Compras finalizadas
+              </div>
+              <h1 className="text-[22px] sm:text-[24px] font-extrabold leading-tight truncate">
+                Histórico de carrinhos
+              </h1>
             </div>
-            <h1 className="text-[24px] font-extrabold leading-tight">
-              Histórico de carrinhos
-            </h1>
           </div>
+
+          {groupId && (
+            <button
+              type="button"
+              onClick={() => setModalAvulsoAberto(true)}
+              className="h-11 px-3.5 rounded-full bg-primary text-white text-xs font-extrabold flex items-center gap-1.5 shrink-0 hover:bg-primary-hover transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Compra avulsa</span>
+            </button>
+          )}
         </div>
 
         {erro && (
@@ -291,8 +315,11 @@ export default function HistoricoCarrinhosPage() {
                 const sub = unit * Number(item.quantidade || 0);
                 totalCarrinho += sub;
 
-                const prod = mapaProdutos.get(item.product_id);
-                const secId = prod?.sector_id || "sem_setor";
+                const prod = item.product_id
+                  ? mapaProdutos.get(item.product_id)
+                  : undefined;
+                const secId =
+                  item.sector_id_avulso || prod?.sector_id || "sem_setor";
                 porSetor.set(secId, (porSetor.get(secId) || 0) + sub);
               }
 
@@ -301,8 +328,8 @@ export default function HistoricoCarrinhosPage() {
                   const sec = mapaSetores.get(secId);
                   return {
                     id: secId,
-                    nome: sec ? sec.nome : "Outros",
-                    emoji: sec ? sec.emoji : "🛒",
+                    nome: sec ? sec.nome : "Sem setor",
+                    emoji: sec ? sec.emoji : "🧾",
                     valor,
                   };
                 })
@@ -345,18 +372,31 @@ export default function HistoricoCarrinhosPage() {
                       )}
                     </div>
 
-                    <button
-                      type="button"
-                      disabled={copiando}
-                      onClick={() => handleRepetir(cart)}
-                      aria-label={`Repetir ${cart.nome}`}
-                      className="h-11 px-4 rounded-full bg-primary-light text-primary-hover text-[13px] font-bold flex items-center justify-center gap-1.5 shrink-0 hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60"
-                    >
-                      <RotateCcw
-                        className={`w-3.5 h-3.5 ${copiando ? "animate-spin" : ""}`}
-                      />
-                      <span>{copiando ? "Copiando..." : "Repetir"}</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setCartEditando(cart)}
+                        aria-label={`Editar ${cart.nome}`}
+                        title="Editar compra"
+                        className="h-11 px-3 rounded-full bg-background border border-border hover:border-primary text-text-main text-[13px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-primary" />
+                        <span>Editar</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={copiando}
+                        onClick={() => handleRepetir(cart)}
+                        aria-label={`Repetir ${cart.nome}`}
+                        className="h-11 px-4 rounded-full bg-primary-light text-primary-hover text-[13px] font-bold flex items-center justify-center gap-1.5 shrink-0 hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60"
+                      >
+                        <RotateCcw
+                          className={`w-3.5 h-3.5 ${copiando ? "animate-spin" : ""}`}
+                        />
+                        <span>{copiando ? "Copiando..." : "Repetir"}</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Resumo por Setor (Seção 6: data, mercado, setores e total) */}
@@ -458,7 +498,20 @@ export default function HistoricoCarrinhosPage() {
                   {aberto && (
                     <div className="bg-background border border-border rounded-xl divide-y divide-border overflow-hidden">
                       {itensDoCart.map((item) => {
-                        const prod = mapaProdutos.get(item.product_id);
+                        const prod = item.product_id
+                          ? mapaProdutos.get(item.product_id)
+                          : undefined;
+                        const secId =
+                          item.sector_id_avulso || prod?.sector_id || null;
+                        const setor = secId ? mapaSetores.get(secId) : undefined;
+                        const emojiItem =
+                          prod?.emoji ||
+                          setor?.emoji ||
+                          (item.descricao_avulsa ? "🧾" : "📦");
+                        const nomeItem =
+                          item.descricao_avulsa ||
+                          prod?.nome ||
+                          "Produto removido";
                         const unit =
                           item.preco_real !== null &&
                           item.preco_real !== undefined
@@ -472,13 +525,15 @@ export default function HistoricoCarrinhosPage() {
                           >
                             <div className="min-w-0">
                               <div className="font-bold text-text-main truncate">
-                                {prod?.emoji || "📦"}{" "}
-                                {prod?.nome || "Produto removido"}
+                                {emojiItem} {nomeItem}
                               </div>
                               <div className="text-[11px] text-text-muted">
                                 {Number(item.quantidade)}{" "}
                                 {prod?.unidade || "un"} × {formatarMoeda(unit)}
                                 {item.marca ? ` · ${item.marca}` : ""}
+                                {setor
+                                  ? ` · ${setor.emoji} ${setor.nome}`
+                                  : " · Sem setor"}
                               </div>
                             </div>
                             <div className="font-extrabold text-text-main shrink-0">
@@ -495,6 +550,36 @@ export default function HistoricoCarrinhosPage() {
           </div>
         )}
       </main>
+
+      {modalAvulsoAberto && groupId && (
+        <AvulsoCartModal
+          groupId={groupId}
+          userId={userId}
+          mercados={mercados}
+          setores={setores}
+          onClose={() => setModalAvulsoAberto(false)}
+          onSaved={async () => {
+            await carregarHistorico();
+          }}
+        />
+      )}
+
+      {cartEditando && groupId && (
+        <EditFinalizedCartModal
+          cart={cartEditando}
+          itens={itensPorCarrinho.get(cartEditando.id) || []}
+          pagamentos={pagamentosPorCarrinho.get(cartEditando.id) || []}
+          mercados={mercados}
+          setores={setores}
+          produtos={produtos}
+          groupId={groupId}
+          userId={userId}
+          onClose={() => setCartEditando(null)}
+          onSaved={async () => {
+            await carregarHistorico();
+          }}
+        />
+      )}
 
       <BottomNav />
     </div>

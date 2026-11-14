@@ -16,12 +16,15 @@ import {
   Tag,
   ArrowRight,
   Pencil,
+  Receipt,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import BottomNav from "@/components/BottomNav";
 import FrequentProductsBar from "@/components/FrequentProductsBar";
 import LiveMarketMode from "@/components/LiveMarketMode";
 import GuestConversionBanner from "@/components/GuestConversionBanner";
+import AvulsoCartModal from "@/components/AvulsoCartModal";
+import { ehProdutoInternoSistema } from "@/lib/ia-config";
 import {
   lerSnapshotModoMercado,
   processarFilaOffline,
@@ -92,6 +95,7 @@ function CompraPlanejamentoContent() {
 
   // Bottom sheet: Novo Carrinho / Editar Nome e Mercado do Carrinho
   const [sheetCarrinhoAberto, setSheetCarrinhoAberto] = useState(false);
+  const [modalAvulsoAberto, setModalAvulsoAberto] = useState(false);
   const [modoSheetCarrinho, setModoSheetCarrinho] = useState<"novo" | "editar">(
     "novo"
   );
@@ -213,7 +217,9 @@ function CompraPlanejamentoContent() {
         const st = (stData as GroupSettings) || null;
         const mkts = (mktData as Market[]) || [];
         const secs = (secData as Sector[]) || [];
-        const prods = (prodData as Product[]) || [];
+        const prods = ((prodData as Product[]) || []).filter(
+          (p) => !ehProdutoInternoSistema(p.codigo_barras)
+        );
         const prcs = (prcData as Price[]) || [];
         const todosCarrinhos = (allCartsData as Cart[]) || [];
 
@@ -266,7 +272,7 @@ function CompraPlanejamentoContent() {
         const mapaFreq = new Map<string, number>();
 
         listaTodosItens.forEach((item) => {
-          if (idsUltimos3Meses.has(item.cart_id)) {
+          if (idsUltimos3Meses.has(item.cart_id) && item.product_id) {
             mapaFreq.set(
               item.product_id,
               (mapaFreq.get(item.product_id) || 0) + 1
@@ -274,15 +280,16 @@ function CompraPlanejamentoContent() {
           }
 
           if (idsFinalizadosMes.has(item.cart_id)) {
-            const secId = mapaProdSetor.get(item.product_id);
-            if (secId) {
-              const precoUsado =
-                item.preco_real !== null
-                  ? Number(item.preco_real)
-                  : Number(item.preco_estimado || 0);
-              const subtotal = precoUsado * Number(item.quantidade);
-              mapaGastoMes.set(secId, (mapaGastoMes.get(secId) || 0) + subtotal);
-            }
+            const secId =
+              item.sector_id_avulso ||
+              (item.product_id ? mapaProdSetor.get(item.product_id) : null) ||
+              "sem_setor";
+            const precoUsado =
+              item.preco_real !== null
+                ? Number(item.preco_real)
+                : Number(item.preco_estimado || 0);
+            const subtotal = precoUsado * Number(item.quantidade);
+            mapaGastoMes.set(secId, (mapaGastoMes.get(secId) || 0) + subtotal);
           }
         });
 
@@ -446,14 +453,20 @@ function CompraPlanejamentoContent() {
 
             // Se o produto foi recém-cadastrado pelo parceiro, garante que ele está no estado local de produtos
             setProdutos((prodsAtuais) => {
-              if (!prodsAtuais.some((p) => p.id === novoItem.product_id)) {
+              if (
+                novoItem.product_id &&
+                !prodsAtuais.some((p) => p.id === novoItem.product_id)
+              ) {
                 supabase
                   .from("products")
                   .select("*")
                   .eq("id", novoItem.product_id)
                   .single()
                   .then(({ data }) => {
-                    if (data) {
+                    if (
+                      data &&
+                      !ehProdutoInternoSistema((data as Product).codigo_barras)
+                    ) {
                       setProdutos((prev) =>
                         prev.some((x) => x.id === (data as Product).id)
                           ? prev
@@ -632,7 +645,12 @@ function CompraPlanejamentoContent() {
   }, [precos, itensCarrinho]);
 
   const idsNoCarrinhoAtual = useMemo(
-    () => new Set(itensCarrinho.map((i) => i.product_id)),
+    () =>
+      new Set(
+        itensCarrinho
+          .map((i) => i.product_id)
+          .filter((id): id is string => Boolean(id))
+      ),
     [itensCarrinho]
   );
 
@@ -640,8 +658,8 @@ function CompraPlanejamentoContent() {
   const itensEnriquecidos = useMemo(() => {
     const marketId = carrinhoAtual?.market_id || mercadoPadraoId;
     return itensCarrinho.map((item) => {
-      const produto = mapaProdutos.get(item.product_id);
-      const listaPrecos = precosPorProduto.get(item.product_id) || [];
+      const produto = item.product_id ? mapaProdutos.get(item.product_id) : undefined;
+      const listaPrecos = item.product_id ? precosPorProduto.get(item.product_id) || [] : [];
       const calc = calcularEstimativaItemCarrinho(
         listaPrecos,
         Number(item.quantidade),
@@ -709,7 +727,8 @@ function CompraPlanejamentoContent() {
   const gruposPorSetor = useMemo(() => {
     const mapaItens = new Map<string, typeof itensEnriquecidos>();
     itensEnriquecidos.forEach((enriq) => {
-      const secId = enriq.produto?.sector_id || "sem_setor";
+      const secId =
+        enriq.item.sector_id_avulso || enriq.produto?.sector_id || "sem_setor";
       const lista = mapaItens.get(secId) || [];
       lista.push(enriq);
       mapaItens.set(secId, lista);
@@ -865,7 +884,9 @@ function CompraPlanejamentoContent() {
 
         // Reestima os itens do carrinho para o novo mercado selecionado
         for (const item of itensCarrinho) {
-          const listaPrecos = precosPorProduto.get(item.product_id) || [];
+          const listaPrecos = item.product_id
+            ? precosPorProduto.get(item.product_id) || []
+            : [];
           const calc = calcularEstimativaItemCarrinho(
             listaPrecos,
             Number(item.quantidade),
@@ -1051,7 +1072,9 @@ function CompraPlanejamentoContent() {
       return;
     }
 
-    const listaPrecos = precosPorProduto.get(item.product_id) || [];
+    const listaPrecos = item.product_id
+      ? precosPorProduto.get(item.product_id) || []
+      : [];
     const calc = calcularEstimativaItemCarrinho(listaPrecos, novaQtd, {
       metodo: settings?.metodo_preco || "media",
       mesesMedia: settings?.meses_media || 3,
@@ -1109,9 +1132,9 @@ function CompraPlanejamentoContent() {
         ? precoUnitarioCalculado.toFixed(2).replace(".", ",")
         : ""
     );
-    const prod = mapaProdutos.get(item.product_id);
+    const prod = item.product_id ? mapaProdutos.get(item.product_id) : undefined;
     setEditandoNomeProdutoNoItem(false);
-    setNomeProdutoEditandoItem(prod?.nome || "");
+    setNomeProdutoEditandoItem(prod?.nome || item.descricao_avulsa || "");
     setUnidadeProdutoEditandoItem(prod?.unidade || "un");
   }
 
@@ -1128,7 +1151,9 @@ function CompraPlanejamentoContent() {
     const marcaLimpa = marcaItemForm.trim() || null;
     const precoDigitado = parseDecimalBR(precoManualForm);
 
-    const listaPrecos = precosPorProduto.get(itemEditando.product_id) || [];
+    const listaPrecos = itemEditando.product_id
+      ? precosPorProduto.get(itemEditando.product_id) || []
+      : [];
     const calc = calcularEstimativaItemCarrinho(listaPrecos, qtdNum, {
       metodo: settings?.metodo_preco || "media",
       mesesMedia: settings?.meses_media || 3,
@@ -1144,7 +1169,9 @@ function CompraPlanejamentoContent() {
       const supabase = createClient();
 
       // Se o usuário renomeou o produto ou trocou a unidade na gaveta do item, faz UPDATE direto em products
-      const prodAtual = mapaProdutos.get(itemEditando.product_id);
+      const prodAtual = itemEditando.product_id
+        ? mapaProdutos.get(itemEditando.product_id)
+        : undefined;
       const novoNomeProd = nomeProdutoEditandoItem.trim();
       if (
         novoNomeProd &&
@@ -1173,7 +1200,12 @@ function CompraPlanejamentoContent() {
 
       // Se o produto nunca teve preço registrado e o usuário informou o estimado, guarda no histórico
       const mktId = carrinhoAtual?.market_id || mercadoPadraoId;
-      if (listaPrecos.length === 0 && precoDigitado > 0 && mktId) {
+      if (
+        itemEditando.product_id &&
+        listaPrecos.length === 0 &&
+        precoDigitado > 0 &&
+        mktId
+      ) {
         await supabase.from("prices").insert({
           group_id: groupId,
           product_id: itemEditando.product_id,
@@ -1376,14 +1408,25 @@ function CompraPlanejamentoContent() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={abrirModalNovoCarrinho}
-            className="h-11 px-3.5 rounded-btn bg-card border border-border hover:border-primary text-primary font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Novo carrinho</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setModalAvulsoAberto(true)}
+              className="h-11 px-3 rounded-btn bg-card border border-border hover:border-primary text-text-main font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+              title="Lançar gasto rápido ou compra sem cupom"
+            >
+              <Receipt className="w-4 h-4 text-primary" />
+              <span className="hidden sm:inline">Avulsa</span>
+            </button>
+            <button
+              type="button"
+              onClick={abrirModalNovoCarrinho}
+              className="h-11 px-3.5 rounded-btn bg-card border border-border hover:border-primary text-primary font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Novo carrinho</span>
+            </button>
+          </div>
         </div>
 
         {/* Se houver mais de um carrinho planejado/aberto, pílulas para alternar */}
@@ -1591,7 +1634,7 @@ function CompraPlanejamentoContent() {
                                     className="flex-1 min-w-0 cursor-pointer"
                                   >
                                     <div className="text-[15px] font-bold text-text-main truncate">
-                                      {produto?.nome || "Produto"}
+                                      {item.descricao_avulsa || produto?.nome || "Produto"}
                                     </div>
                                     <div className="text-xs text-text-muted flex flex-wrap items-center gap-1">
                                       <span>
@@ -1909,19 +1952,24 @@ function CompraPlanejamentoContent() {
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-extrabold truncate">
                     {nomeProdutoEditandoItem.trim() ||
-                      mapaProdutos.get(itemEditando.product_id)?.nome ||
+                      (itemEditando.product_id
+                        ? mapaProdutos.get(itemEditando.product_id)?.nome
+                        : undefined) ||
+                      itemEditando.descricao_avulsa ||
                       "Item"}
                   </h3>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditandoNomeProdutoNoItem(!editandoNomeProdutoNoItem)
-                    }
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-light text-primary text-[11px] font-bold shrink-0 cursor-pointer"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    <span>Renomear produto</span>
-                  </button>
+                  {itemEditando.product_id && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditandoNomeProdutoNoItem(!editandoNomeProdutoNoItem)
+                      }
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-light text-primary text-[11px] font-bold shrink-0 cursor-pointer"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      <span>Renomear produto</span>
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-text-muted">
                   Ajustar quantidade, marca ou estimativa
@@ -2032,8 +2080,9 @@ function CompraPlanejamentoContent() {
                           const novaMarca = marcaItemForm === m ? "" : m;
                           setMarcaItemForm(novaMarca);
                           // Atualiza a prévia do preço estimado para a marca escolhida
-                          const lista =
-                            precosPorProduto.get(itemEditando.product_id) || [];
+                          const lista = itemEditando.product_id
+                            ? precosPorProduto.get(itemEditando.product_id) || []
+                            : [];
                           const c = calcularEstimativaItemCarrinho(
                             lista,
                             parseDecimalBR(qtdItemForm) || 1,
@@ -2329,6 +2378,20 @@ function CompraPlanejamentoContent() {
             </form>
           </div>
         </div>
+      )}
+
+      {modalAvulsoAberto && groupId && (
+        <AvulsoCartModal
+          groupId={groupId}
+          userId={userId}
+          mercados={mercados}
+          setores={setores}
+          onClose={() => setModalAvulsoAberto(false)}
+          onSaved={() => {
+            setModalAvulsoAberto(false);
+            router.push("/historico");
+          }}
+        />
       )}
 
       <BottomNav />

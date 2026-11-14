@@ -111,8 +111,9 @@ export default function OrcamentoPage() {
       const mapaProdSetor = new Map<string, string | null>();
       const mapaContagemProd = new Map<string, number>();
       for (const p of prods) {
+        if (p.codigo_barras === "__config_ia_grupo__") continue;
         mapaProdSetor.set(p.id, p.sector_id);
-        if (p.sector_id) {
+        if (p.sector_id && p.codigo_barras !== "__avulso__") {
           mapaContagemProd.set(
             p.sector_id,
             (mapaContagemProd.get(p.sector_id) || 0) + 1
@@ -131,15 +132,17 @@ export default function OrcamentoPage() {
           .map((c) => c.id)
       );
 
-      // Soma (preço real × quantidade) dos itens de carrinhos finalizados no mês
+      // Soma (preço real × quantidade) dos itens de carrinhos finalizados no mês (incluindo itens sem setor / avulsos)
       const mapaGasto = new Map<string, number>();
       for (const item of todosItens) {
         if (!idsFinalizadosNoMes.has(item.cart_id)) continue;
         // Considera itens marcados (ou todos caso algum carrinho antigo não tenha desmarcado)
         if (item.marcado === false) continue;
 
-        const secId = mapaProdSetor.get(item.product_id);
-        if (!secId) continue;
+        const secId =
+          item.sector_id_avulso ||
+          (item.product_id ? mapaProdSetor.get(item.product_id) : null) ||
+          "sem_setor";
 
         const precoUnit =
           item.preco_real !== null && item.preco_real !== undefined
@@ -163,26 +166,31 @@ export default function OrcamentoPage() {
   }, [carregarDados]);
 
   // Totais gerais do mês
-  const { gastoTotalMes, orcamentoTotalMes, percentualTotal } = useMemo(() => {
-    let somaGasto = 0;
-    let somaOrcamento = 0;
+  const { gastoTotalMes, orcamentoTotalMes, percentualTotal, gastoSemSetor } =
+    useMemo(() => {
+      let somaGasto = 0;
+      let somaOrcamento = 0;
 
-    for (const s of setores) {
-      somaGasto += gastoPorSetor.get(s.id) || 0;
-      if (s.orcamento_mensal !== null && Number(s.orcamento_mensal) > 0) {
-        somaOrcamento += Number(s.orcamento_mensal);
+      for (const s of setores) {
+        somaGasto += gastoPorSetor.get(s.id) || 0;
+        if (s.orcamento_mensal !== null && Number(s.orcamento_mensal) > 0) {
+          somaOrcamento += Number(s.orcamento_mensal);
+        }
       }
-    }
 
-    const perc =
-      somaOrcamento > 0 ? Math.round((somaGasto / somaOrcamento) * 100) : 0;
+      const semSetor = gastoPorSetor.get("sem_setor") || 0;
+      somaGasto += semSetor;
 
-    return {
-      gastoTotalMes: somaGasto,
-      orcamentoTotalMes: somaOrcamento,
-      percentualTotal: perc,
-    };
-  }, [setores, gastoPorSetor]);
+      const perc =
+        somaOrcamento > 0 ? Math.round((somaGasto / somaOrcamento) * 100) : 0;
+
+      return {
+        gastoTotalMes: somaGasto,
+        orcamentoTotalMes: somaOrcamento,
+        percentualTotal: perc,
+        gastoSemSetor: semSetor,
+      };
+    }, [setores, gastoPorSetor]);
 
   // Define as cores reservadas exclusivamente ao orçamento (Seção 6 e 4-orcamento.html)
   function obterCoresOrcamento(razao: number): {
@@ -522,6 +530,22 @@ export default function OrcamentoPage() {
               </button>
             );
           })}
+
+          {gastoSemSetor > 0 && (
+            <div className="w-full text-left bg-card border border-dashed border-border rounded-[14px] px-[14px] py-[11px] flex flex-col gap-1">
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-[14px] font-bold truncate">
+                  🧾 Avulsos / Sem setor
+                </span>
+                <span className="text-[12px] font-extrabold text-text-main shrink-0">
+                  {formatarMoeda(gastoSemSetor)}
+                </span>
+              </div>
+              <p className="text-[11px] text-text-muted leading-snug">
+                Compras avulsas ou produtos sem setor definido (já somados no gasto total do mês). Você pode atribuir um setor pelo Histórico.
+              </p>
+            </div>
+          )}
         </div>
       </main>
 

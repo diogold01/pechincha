@@ -260,8 +260,10 @@ export default function HomePage() {
       for (const item of todosItens) {
         if (!idsFinalizadosMes.has(item.cart_id)) continue;
         if (item.marcado === false) continue;
-        const secId = mapaProdSetor.get(item.product_id);
-        if (!secId) continue;
+        const secId =
+          item.sector_id_avulso ||
+          (item.product_id ? mapaProdSetor.get(item.product_id) : null) ||
+          "sem_setor";
         const unit =
           item.preco_real !== null && item.preco_real !== undefined
             ? Number(item.preco_real)
@@ -505,6 +507,8 @@ export default function HomePage() {
       }
     }
   }
+
+  gastoTotalMes += gastoPorSetor.get("sem_setor") || 0;
 
   setoresEmAlerta.sort((a, b) => b.percentual - a.percentual);
 

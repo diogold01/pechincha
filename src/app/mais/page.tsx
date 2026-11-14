@@ -28,10 +28,11 @@ import BottomNav from "@/components/BottomNav";
 import GuestConversionBanner from "@/components/GuestConversionBanner";
 import {
   MODELOS_IA_DISPONIVEIS,
+  carregarConfigIADoGrupo,
   lerConfigIA,
-  limparChaveIA,
+  limparChaveIANoGrupo,
   mascararChaveIA,
-  salvarConfigIA,
+  salvarConfigIANoGrupo,
   temIAConfigurada,
   type ConfigIA,
   type ModeloIA,
@@ -154,6 +155,9 @@ export default function MaisPage() {
       }
       setMercados((mData as Market[]) || []);
       setSetores((secData as Sector[]) || []);
+
+      const cfgGrupo = await carregarConfigIADoGrupo(supabase, gId);
+      setConfigIA(cfgGrupo);
     } catch {
       setErro("Erro ao carregar os cadastros.");
     } finally {
@@ -457,7 +461,7 @@ export default function MaisPage() {
     }
   }
 
-  function handleSalvarConfigIA(e: React.FormEvent) {
+  async function handleSalvarConfigIA(e: React.FormEvent) {
     e.preventDefault();
     const chave = iaChaveForm.trim();
 
@@ -469,23 +473,28 @@ export default function MaisPage() {
       return;
     }
 
-    const salva = salvarConfigIA({
-      ativada: iaAtivadaForm,
-      apiKey: chave,
-      modelo: iaModeloForm,
-    });
+    const supabase = createClient();
+    const salva = groupId
+      ? await salvarConfigIANoGrupo(supabase, groupId, {
+          ativada: iaAtivadaForm,
+          apiKey: chave,
+          modelo: iaModeloForm,
+        })
+      : lerConfigIA();
     setConfigIA(salva);
     setSheetIAAberto(false);
   }
 
-  function handleRemoverChaveIA() {
-    const limpa = limparChaveIA();
+  async function handleRemoverChaveIA() {
+    if (!groupId) return;
+    const supabase = createClient();
+    const limpa = await limparChaveIANoGrupo(supabase, groupId);
     setConfigIA(limpa);
     setIaAtivadaForm(false);
     setIaChaveForm("");
     setFeedbackIA({
       tipo: "sucesso",
-      texto: "Chave removida deste aparelho.",
+      texto: "Chave removida da conta da família e deste aparelho.",
     });
   }
 
@@ -1123,7 +1132,7 @@ export default function MaisPage() {
                   </a>
                 </div>
                 <p className="leading-relaxed">
-                  Acesse com sua conta Google, clique em <strong>Create API key</strong> e cole o código abaixo. A chave fica salva <strong>apenas neste aparelho</strong> e só enviamos os nomes dos produtos do cupom.
+                  Acesse com sua conta Google, clique em <strong>Create API key</strong> e cole o código abaixo. A chave fica salva <strong>para toda a sua família/grupo</strong> (sincronizada automaticamente nos seus aparelhos).
                 </p>
               </div>
 
