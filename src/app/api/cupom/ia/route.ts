@@ -11,6 +11,14 @@ export interface ItemAnalisadoIA {
   emoji?: string;
 }
 
+export interface ProdutoCatalogoFormatadoIA {
+  indice: number;
+  nome_sugerido: string;
+  marca_removida: string;
+  setor_sugerido: string;
+  emoji_sugerido: string;
+}
+
 /**
  * Converte códigos de erro da API do Google AI Studio em mensagens simples em português
  */
@@ -54,6 +62,51 @@ async function chamarGemini(
   });
 }
 
+/**
+ * Converte resposta não-OK do Gemini em NextResponse padronizado em português
+ */
+async function criarErroRespostaGemini(res: Response) {
+  const errJson = await res.json().catch(() => ({}));
+  const errMsg = errJson?.error?.message || "";
+  return NextResponse.json(
+    { erro: traduzirErroGemini(res.status, errMsg) },
+    { status: res.status >= 400 && res.status < 500 ? 400 : 502 }
+  );
+}
+
+/**
+ * Executa prompt com saída JSON estruturada no Gemini e devolve o objeto parseado ou uma resposta de erro
+ */
+async function executarJsonEstruturadoGemini<T>(
+  apiKey: string,
+  modelo: string,
+  prompt: string,
+  responseSchema: Record<string, unknown>
+): Promise<{ ok: true; data: T } | { ok: false; response: NextResponse }> {
+  const res = await chamarGemini(apiKey, modelo, {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema,
+      temperature: 0.1,
+    },
+  });
+
+  if (!res.ok) {
+    return { ok: false, response: await criarErroRespostaGemini(res) };
+  }
+
+  const data = await res.json();
+  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const jsonLimpo = rawText
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  return { ok: true, data: JSON.parse(jsonLimpo) as T };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = req.headers.get("x-gemini-api-key")?.trim() || "";
@@ -83,12 +136,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        const errMsg = errJson?.error?.message || "";
-        return NextResponse.json(
-          { erro: traduzirErroGemini(res.status, errMsg) },
-          { status: res.status >= 400 && res.status < 500 ? 400 : 502 }
-        );
+        return criarErroRespostaGemini(res);
       }
 
       return NextResponse.json({
@@ -138,58 +186,155 @@ export async function POST(req: NextRequest) {
         listaNumerada,
       ].join("\n");
 
-      const res = await chamarGemini(apiKey, modelo, {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              itens: {
-                type: "ARRAY",
-                items: {
-                  type: "OBJECT",
-                  properties: {
-                    indice: { type: "INTEGER" },
-                    nome_limpo: { type: "STRING" },
-                    marca: { type: "STRING" },
-                    setor: { type: "STRING" },
-                    emoji: { type: "STRING" },
-                  },
-                  required: ["indice", "nome_limpo", "marca", "setor", "emoji"],
-                },
+      const resultado = await executarJsonEstruturadoGemini<{
+        itens?: ItemAnalisadoIA[];
+      }>(apiKey, modelo, prompt, {
+        type: "OBJECT",
+        properties: {
+          itens: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                indice: { type: "INTEGER" },
+                nome_limpo: { type: "STRING" },
+                marca: { type: "STRING" },
+                setor: { type: "STRING" },
+                emoji: { type: "STRING" },
               },
+              required: ["indice", "nome_limpo", "marca", "setor", "emoji"],
             },
-            required: ["itens"],
           },
-          temperature: 0.1,
         },
+        required: ["itens"],
       });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        const errMsg = errJson?.error?.message || "";
-        return NextResponse.json(
-          { erro: traduzirErroGemini(res.status, errMsg) },
-          { status: res.status >= 400 && res.status < 500 ? 400 : 502 }
-        );
+      if (!resultado.ok) {
+        return resultado.response;
       }
 
-      const data = await res.json();
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const jsonLimpo = rawText
-        .replace(/^```json\s*/i, "")
-        .replace(/^```\s*/i, "")
-        .replace(/\s*```$/i, "")
-        .trim();
-
-      const parsed = JSON.parse(jsonLimpo) as { itens?: ItemAnalisadoIA[] };
-      const itensAnalisados = Array.isArray(parsed?.itens) ? parsed.itens : [];
+      const itensAnalisados = Array.isArray(resultado.data?.itens)
+        ? resultado.data.itens
+        : [];
 
       return NextResponse.json({
         ok: true,
         modelo,
         itens: itensAnalisados,
+      });
+    }
+
+    // 3. Padronização em lote dos produtos já cadastrados no catálogo
+    if (acao === "formatar_catalogo") {
+      const produtosEntrada = Array.isArray(body?.produtos)
+        ? body.produtos
+            .slice(0, 50)
+            .map((p: any, i: number) => ({
+              indice: typeof p?.indice === "number" ? p.indice : i,
+              nome: typeof p?.nome === "string" ? p.nome.trim() : "",
+              setor_atual:
+                typeof p?.setor_atual === "string" ? p.setor_atual.trim() : "",
+              emoji_atual:
+                typeof p?.emoji_atual === "string" ? p.emoji_atual.trim() : "",
+            }))
+            .filter((p: { nome: string }) => p.nome.length > 0)
+        : [];
+
+      if (produtosEntrada.length === 0) {
+        return NextResponse.json(
+          { erro: "Nenhum produto enviado para formatação." },
+          { status: 400 }
+        );
+      }
+
+      const setoresDisponiveis = Array.isArray(body?.setores)
+        ? body.setores
+            .slice(0, 40)
+            .map((s: unknown) => (typeof s === "string" ? s.trim() : ""))
+            .filter(Boolean)
+        : [];
+
+      const marcasConhecidas = Array.isArray(body?.marcas_conhecidas)
+        ? body.marcas_conhecidas
+            .slice(0, 150)
+            .map((m: unknown) => (typeof m === "string" ? m.trim() : ""))
+            .filter(Boolean)
+        : [];
+
+      const listaProdutos = produtosEntrada
+        .map(
+          (p: {
+            indice: number;
+            nome: string;
+            setor_atual: string;
+            emoji_atual: string;
+          }) =>
+            `${p.indice}: ${p.nome}${p.setor_atual ? ` [setor atual: ${p.setor_atual}]` : ""}${
+              p.emoji_atual ? ` [emoji atual: ${p.emoji_atual}]` : ""
+            }`
+        )
+        .join("\n");
+
+      const prompt = [
+        "Você padroniza o catálogo de produtos de um supermercado brasileiro.",
+        "Para cada produto numerado, retorne no JSON exatamente o mesmo 'indice' e preencha:",
+        "- nome_sugerido: nome limpo, natural e padronizado em português do Brasil (Title Case, acentuação correta, sem abreviações feias, sem códigos e REMOVENDO qualquer marca do nome). Remova unidade solta no final ('kg', 'un', 'pc', 'cx', 'lt'), mas preserve medidas úteis da embalagem como '800g', '400g', '2L', '500ml', e preserve cortes/variedades/sabores que definem o produto (ex: 'Peixinho', 'Taiti', 'Nanica', 'Inglesa', 'Mussarela', 'Integral', 'Zero Lactose'). Exemplos: 'PAO FRANCES MARQUESPAN kg' -> 'Pão Francês'; 'FILEZINHO FRANGO BELLO 800G' -> 'Filezinho de Frango 800g'; 'PANETONE VENEZA 400G C/GOTAS CHOC' -> 'Panetone com Gotas de Chocolate 400g'; 'PAPEL HIG ATUALLE 12>20M FOLHA DUPLA NEUTRO' -> 'Papel Higiênico Folha Dupla Neutro 12 rolos'.",
+        "- marca_removida: se você removeu alguma marca que estava dentro do nome, informe essa marca capitalizada (ex: 'Marquespan', 'Bello', 'Veneza', 'Atualle'). Se não havia marca no nome, retorne ''.",
+        marcasConhecidas.length > 0
+          ? `Marcas já usadas neste catálogo (ajuda a identificar marcas a remover): ${marcasConhecidas.join(", ")}.`
+          : "",
+        setoresDisponiveis.length > 0
+          ? `- setor_sugerido: escolha exatamente um dos setores disponíveis (${setoresDisponiveis.join(", ")}), mantendo o setor atual caso ele já faça sentido.`
+          : "- setor_sugerido: sugira um setor comum brasileiro (Hortifruti, Açougue, Padaria, Laticínios, Mercearia, Bebidas, Limpeza, Higiene, Congelados, Pet).",
+        "- emoji_sugerido: um único emoji específico e expressivo que represente o produto (ex: '🥖', '🍗', '🍋', '🧻', '🐶', '🥩'). Nunca use '📦'. Se o emoji atual já for específico e ótimo, pode mantê-lo.",
+        "",
+        "Produtos:",
+        listaProdutos,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const resultado = await executarJsonEstruturadoGemini<{
+        itens?: ProdutoCatalogoFormatadoIA[];
+      }>(apiKey, modelo, prompt, {
+        type: "OBJECT",
+        properties: {
+          itens: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                indice: { type: "INTEGER" },
+                nome_sugerido: { type: "STRING" },
+                marca_removida: { type: "STRING" },
+                setor_sugerido: { type: "STRING" },
+                emoji_sugerido: { type: "STRING" },
+              },
+              required: [
+                "indice",
+                "nome_sugerido",
+                "marca_removida",
+                "setor_sugerido",
+                "emoji_sugerido",
+              ],
+            },
+          },
+        },
+        required: ["itens"],
+      });
+
+      if (!resultado.ok) {
+        return resultado.response;
+      }
+
+      const itensFormatados = Array.isArray(resultado.data?.itens)
+        ? resultado.data.itens
+        : [];
+
+      return NextResponse.json({
+        ok: true,
+        modelo,
+        itens: itensFormatados,
       });
     }
 
