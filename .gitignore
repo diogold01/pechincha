@@ -15,13 +15,13 @@
 # Produção
 /build
 
-# Depuração
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Variáveis de ambiente sensíveis (NUNCA ENVIAR AO GIT)
+# Variáveis de ambiente
 .env*.local
 .env
 .env.production
@@ -44,29 +44,3 @@ next-env.d.ts
 *.sln
 *.sw?
 Thumbs.db
-
-# Tokens locais temporários
-*token*.txt
-.git-token
-
-# Cupons fiscais locais em PDF
-*.pdf
-
-# Arquivos de instruções/regras de IA e Prompts (NÃO ENVIAR AO GITHUB)
-GLOBAL_RULES.md
-GEMINI.md
-CLAUDE.md
-rules.md
-context.md
-REGISTRO.md
-PROJETO.md
-docs/PROMPT.md
-docs/referencias/
-docs/referencias/prompt-antigravity-app-compras.md
-*.ai
-.cursor/
-.gemini/
-.brain/
-
-# Imagens e referências locais de desenvolvimento
-references/
