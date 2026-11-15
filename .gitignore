@@ -53,13 +53,20 @@ Thumbs.db
 *.pdf
 
 # Arquivos de instruções/regras de IA e Prompts (NÃO ENVIAR AO GITHUB)
+GLOBAL_RULES.md
 GEMINI.md
+CLAUDE.md
+rules.md
+context.md
+REGISTRO.md
+PROJETO.md
 docs/PROMPT.md
+docs/referencias/
 docs/referencias/prompt-antigravity-app-compras.md
 *.ai
 .cursor/
 .gemini/
+.brain/
 
 # Imagens e referências locais de desenvolvimento
 references/
-

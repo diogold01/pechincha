@@ -1,8 +1,8 @@
 # Pechincha
 
-Aplicação web para planejamento colaborativo de compras de mercado, registro de histórico de preços por estabelecimento e controle de orçamento mensal por categoria.
+Aplicação web colaborativa para planejamento de compras de supermercado, histórico de preços por estabelecimento, leitura de cupons fiscais (NFC-e/DANFE) com inteligência artificial e controle de orçamento mensal.
 
-Deploy em produção: [pechincha-two.vercel.app](https://pechincha-two.vercel.app)
+Aplicação no ar: [pechincha-two.vercel.app](https://pechincha-two.vercel.app)
 
 ---
 
@@ -20,67 +20,77 @@ Deploy em produção: [pechincha-two.vercel.app](https://pechincha-two.vercel.ap
 
 ---
 
+## O Problema e a Solução
+
+Controlar gastos de supermercado em casal ou família costuma esbarrar em dois problemas: listas espalhadas em aplicativos de mensagem sem estimativa real de custo e cupons fiscais com descrições abreviadas (`"BISC RECH CHOC 140G"`, `"LIMP MULT 500ML"`) que dificultam manter um histórico limpo de preços por produto e mercado.
+
+O Pechincha resolve essa rotina unificando o planejamento de compras, o acompanhamento de preços praticados em cada estabelecimento e a importação assistida por IA de notas fiscais para alimentar o catálogo sem digitação manual pesada.
+
+---
+
+## Como a IA Funciona (Google Gemini)
+
+A integração com a API do Google Gemini atua em dois fluxos principais, sempre com validação humana antes de salvar:
+
+- **Leitura e limpeza de cupom fiscal (`src/app/api/cupom/ia/route.ts`):** após extrair os itens brutos do cupom via QR Code pela câmera, upload de PDF (`unpdf`) ou consulta ao link da SEFAZ, o sistema envia a lista ao Gemini com schema estruturado (`responseSchema`) para traduzir abreviações fiscais, identificar marca e unidade de medida e associar cada linha aos produtos já existentes no catálogo do grupo.
+- **Padronização de catálogo em lote (`CatalogAIFormatterModal`):** analisa os produtos cadastrados e sugere correções de nome, marca e categoria em uma tela de revisão comparativa (Antes e Depois), permitindo aprovar ou descartar item a item.
+- **Contingência local (`src/lib/cupom-matcher.ts`):** quando a IA não é acionada, a vinculação entre os itens do cupom e o catálogo utiliza cálculo local de similaridade textual (distância de Levenshtein e sobreposição de palavras).
+
+---
+
 ## Funcionalidades
 
-- **Colaboração em Tempo Real:** Sincronização de listas e carrinhos ativos entre dispositivos via Supabase Realtime, permitindo compras simultâneas no mesmo mercado.
-- **Modo Mercado:** Interface otimizada para uso mobile em loja física, com teclado numérico 3x4 integrado para entrada rápida de centavos e pesagem (KG), ordenação de setores pelo layout físico do mercado e suporte a pagamento misto.
-- **Histórico de Preços e Estimativas:** Registro automático de preços por estabelecimento, marca e data, com projeção do custo da compra antes de ir ao mercado (baseada em média móvel de 3 meses, último preço ou menor valor histórico).
-- **Variações de Itens:** Suporte ao agrupamento de quantidades ou separação em linhas distintas para registrar marcas, sabores e valores diferentes de um mesmo produto.
-- **Controle Orçamentário:** Definição de limites mensais globais e por setor (hortifrúti, açougue, limpeza, etc.), com sinalização visual de aproximação (80%) e estouro de teto.
-- **Importação Inteligente de Cupom Fiscal:** Leitura de QR Code pela câmera, upload de arquivo PDF (Danfe/NFC-e) e consulta a links da SEFAZ, com motor de matching que compara itens com o catálogo existente, identifica marcas e gera carrinhos prontos para conferência.
-- **Resiliência Offline:** Fila local via `localStorage` com remapeamento de IDs temporários para reconciliação automática de dados em locais sem sinal 4G/Wi-Fi.
-- **Acesso para Avaliação (Modo Visitante):** Autenticação em um clique com ambiente isolado para testes rápidos da interface.
-- **Exportação e Backup:** Extração dos dados em CSV e rotina completa de backup/restauração em JSON.
+- **Colaboração em tempo real:** sincronização de listas e carrinhos ativos entre dispositivos via Supabase, permitindo marcar itens simultaneamente durante a compra.
+- **Modo Mercado:** interface adaptada para uso no celular dentro da loja, com teclado numérico integrado para preço e peso (kg), ordenação por setores e suporte a pagamento dividido.
+- **Histórico de preços e estimativa de carrinho:** registro automático de preços por mercado, marca e data, projetando o valor total da lista com base na média recente, último preço pago ou menor valor registrado.
+- **Controle de orçamento:** definição de teto mensal geral e por categoria (hortifrúti, açougue, limpeza, etc.), com alertas visuais ao atingir 80% ou ultrapassar o limite.
+- **Fila de sincronização offline:** armazenamento temporário em `localStorage` para registrar itens mesmo em mercados com sinal instável de internet.
+- **Modo visitante:** acesso imediato com um clique em ambiente de demonstração isolado.
+- **Exportação e backup:** exportação de dados em CSV e rotina de backup/restauração em JSON.
 
 ---
 
-## Stack Tecnológica
+## Limites Atuais
 
-- **Front-end:** Next.js 15 (App Router), React 19, TypeScript
-- **Estilização:** Tailwind CSS, Lucide React
-- **Banco de Dados & Autenticação:** Supabase (PostgreSQL 15, Auth via SSR cookies, Row Level Security estrito por grupo, Realtime)
-- **Armazenamento Local:** Web Storage API / Service Worker
-- **Infraestrutura:** Vercel (Edge Runtime e Serverless Functions)
+- A chave da API do Google Gemini é configurada pelo próprio grupo de usuários nas configurações da aplicação (modelo BYOK).
+- A importação direta por URL da SEFAZ depende da disponibilidade e do layout público de cada portal estadual; quando o portal bloqueia leitura direta, o envio do PDF da nota ou a leitura do QR Code funcionam como alternativa.
 
 ---
 
-## Execução Local
+## Stack
+
+- TypeScript, React e Next.js
+- Tailwind CSS e Lucide React
+- Supabase (banco de dados em nuvem, autenticação com acesso por grupo via RLS e sincronização em tempo real)
+- Google Gemini API (interpretação estruturada de cupons fiscais e padronização de catálogo)
+
+---
+
+## Como Executar Localmente
 
 ### Pré-requisitos
 - Node.js 18.18+ ou 20+
-- npm, pnpm ou yarn
-- Instância configurada no Supabase
+- Projeto configurado no Supabase
 
 ### Passo a passo
 
-1. Clone o repositório:
+1. Clone o repositório e instale as dependências:
 ```bash
 git clone https://github.com/diogold01/pechincha.git
 cd pechincha
-```
-
-2. Instale as dependências:
-```bash
 npm install
 ```
 
-3. Configure o banco de dados:
-Execute o script [`supabase/schema.sql`](supabase/schema.sql) no SQL Editor do Supabase para criar as tabelas, triggers e políticas de segurança (RLS).
+2. Execute o script [`supabase/schema.sql`](supabase/schema.sql) no SQL Editor do Supabase para criar as tabelas e políticas de acesso (RLS).
 
-4. Configure as variáveis de ambiente:
-Crie o arquivo `.env.local` na raiz:
+3. Crie o arquivo `.env.local` na raiz do projeto:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sua-chave-anon-publica
 ```
 
-5. Inicie o servidor:
+4. Inicie o servidor de desenvolvimento:
 ```bash
 npm run dev
 ```
-Acesse [http://localhost:3000](http://localhost:3000).
-
-6. Build de produção:
-```bash
-npm run build
-```
+Acesse `http://localhost:3000`.
