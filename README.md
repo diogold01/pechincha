@@ -59,9 +59,9 @@ A integração com a API do Google Gemini atua em dois fluxos principais, sempre
 
 ## Stack
 
-- TypeScript, React e Next.js
+- TypeScript, React e Next.js (App Router)
 - Tailwind CSS e Lucide React
-- Supabase (banco de dados em nuvem, autenticação com acesso por grupo via RLS e sincronização em tempo real)
+- Supabase (PostgreSQL, autenticação com isolamento por grupo via RLS e sincronização em tempo real)
 - Google Gemini API (interpretação estruturada de cupons fiscais e padronização de catálogo)
 
 ---
