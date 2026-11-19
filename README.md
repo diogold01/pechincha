@@ -81,7 +81,7 @@ cd pechincha
 npm install
 ```
 
-2. Execute o script [`supabase/schema.sql`](supabase/schema.sql) no SQL Editor do Supabase para criar as tabelas e políticas de acesso (RLS).
+2. Execute o script [`supabase/schema.sql`](supabase/schema.sql) no SQL Editor do Supabase para criar as tabelas e políticas de acesso (RLS). Caso esteja atualizando um banco já existente, execute também [`supabase/migration_v3_melhorias.sql`](supabase/migration_v3_melhorias.sql).
 
 3. Crie o arquivo `.env.local` na raiz do projeto:
 ```env
