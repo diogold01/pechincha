@@ -2,20 +2,109 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X, Check, Trash2, AlertCircle } from "lucide-react";
+import {
+  Plus,
+  X,
+  Check,
+  Trash2,
+  AlertCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
 import BottomNav from "@/components/BottomNav";
+import BudgetAnalyticsDashboard, {
+  type EvolucaoMesItem,
+  type MercadoResumoItem,
+  type PagamentoResumoItem,
+  type SetorResumoItem,
+  type TopProdutoItem,
+  type VariacaoPrecoItem,
+} from "@/components/BudgetAnalyticsDashboard";
+import {
+  carregarConfigIADoGrupo,
+  ehProdutoInternoSistema,
+  lerConfigIA,
+  type ConfigIA,
+} from "@/lib/ia-config";
 import {
   formatarMoeda,
   parseDecimalBR,
-  pertenceAoMesAtualNoFuso,
   LIMITE_ORCAMENTO_ALERTA,
   LIMITE_ORCAMENTO_ESTOURO,
 } from "@/lib/format";
-import type { Cart, CartItem, Group, Product, Sector } from "@/lib/types";
+import type {
+  Cart,
+  CartItem,
+  CartPayment,
+  Group,
+  Market,
+  Price,
+  Product,
+  Sector,
+} from "@/lib/types";
 
 const SUGESTOES_ORCAMENTO = [100, 150, 300, 500, 800];
+
+const MESES_CURTOS = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
+
+const MESES_COMPLETOS = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+function extrairAnoMesNoFuso(dataIso: string | Date, fuso: string): string {
+  try {
+    const dt = typeof dataIso === "string" ? new Date(dataIso) : dataIso;
+    const partes = new Intl.DateTimeFormat("en-CA", {
+      timeZone: fuso,
+      year: "numeric",
+      month: "2-digit",
+    }).formatToParts(dt);
+    const ano = partes.find((p) => p.type === "year")?.value;
+    const mes = partes.find((p) => p.type === "month")?.value;
+    if (ano && mes) return `${ano}-${mes}`;
+  } catch {}
+  const d = typeof dataIso === "string" ? new Date(dataIso) : dataIso;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function deslocarAnoMes(anoMes: string, deltaMeses: number): string {
+  const [anoStr, mesStr] = anoMes.split("-");
+  const d = new Date(Number(anoStr), Number(mesStr) - 1 + deltaMeses, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatarAnoMesCompleto(anoMes: string): string {
+  const [anoStr, mesStr] = anoMes.split("-");
+  const idx = Number(mesStr) - 1;
+  return `${MESES_COMPLETOS[idx] || "Mês"} de ${anoStr}`;
+}
 
 export default function OrcamentoPage() {
   const router = useRouter();
@@ -25,12 +114,19 @@ export default function OrcamentoPage() {
   const [groupId, setGroupId] = useState<string | null>(null);
   const [grupo, setGrupo] = useState<Group | null>(null);
   const [setores, setSetores] = useState<Sector[]>([]);
-  const [gastoPorSetor, setGastoPorSetor] = useState<Map<string, number>>(
-    new Map()
+  const [produtos, setProdutos] = useState<Product[]>([]);
+  const [mercados, setMercados] = useState<Market[]>([]);
+  const [carrinhosFinalizados, setCarrinhosFinalizados] = useState<Cart[]>([]);
+  const [todosItens, setTodosItens] = useState<CartItem[]>([]);
+  const [todosPagamentos, setTodosPagamentos] = useState<CartPayment[]>([]);
+  const [todosPrecos, setTodosPrecos] = useState<Price[]>([]);
+  const [configIA, setConfigIA] = useState<ConfigIA>(() => lerConfigIA());
+
+  // Controle do mês selecionado e do acordeão de metas por setor (recolhido por padrão)
+  const [anoMesSelecionado, setAnoMesSelecionado] = useState<string>(() =>
+    extrairAnoMesNoFuso(new Date(), "America/Cuiaba")
   );
-  const [qtdProdutosPorSetor, setQtdProdutosPorSetor] = useState<
-    Map<string, number>
-  >(new Map());
+  const [setoresExpandidos, setSetoresExpandidos] = useState(false);
 
   // Estados do Bottom Sheet de criar/editar setor
   const [modalAberto, setModalAberto] = useState(false);
@@ -79,8 +175,11 @@ export default function OrcamentoPage() {
         { data: gData },
         { data: secData },
         { data: prodData },
+        { data: mktData },
         { data: cartsData },
         { data: itemsData },
+        { data: payData },
+        { data: prcData },
       ] = await Promise.all([
         supabase.from("groups").select("*").eq("id", gId).single(),
         supabase
@@ -90,70 +189,35 @@ export default function OrcamentoPage() {
           .order("ordem", { ascending: true })
           .order("nome", { ascending: true }),
         supabase.from("products").select("*").eq("group_id", gId),
+        supabase.from("markets").select("*").eq("group_id", gId),
         supabase
           .from("carts")
           .select("*")
           .eq("group_id", gId)
           .eq("status", "finalizado"),
         supabase.from("cart_items").select("*").eq("group_id", gId),
+        supabase.from("cart_payments").select("*").eq("group_id", gId),
+        supabase
+          .from("prices")
+          .select("*")
+          .eq("group_id", gId)
+          .order("data", { ascending: false })
+          .order("criado_em", { ascending: false })
+          .limit(600),
       ]);
 
       const grp = (gData as Group) || null;
-      const secs = (secData as Sector[]) || [];
-      const prods = (prodData as Product[]) || [];
-      const carrinhosFinalizados = (cartsData as Cart[]) || [];
-      const todosItens = (itemsData as CartItem[]) || [];
-
       setGrupo(grp);
-      setSetores(secs);
+      setSetores((secData as Sector[]) || []);
+      setProdutos((prodData as Product[]) || []);
+      setMercados((mktData as Market[]) || []);
+      setCarrinhosFinalizados((cartsData as Cart[]) || []);
+      setTodosItens((itemsData as CartItem[]) || []);
+      setTodosPagamentos((payData as CartPayment[]) || []);
+      setTodosPrecos((prcData as Price[]) || []);
 
-      // Mapeia produto -> setor e conta produtos por setor
-      const mapaProdSetor = new Map<string, string | null>();
-      const mapaContagemProd = new Map<string, number>();
-      for (const p of prods) {
-        if (p.codigo_barras === "__config_ia_grupo__") continue;
-        mapaProdSetor.set(p.id, p.sector_id);
-        if (p.sector_id && p.codigo_barras !== "__avulso__") {
-          mapaContagemProd.set(
-            p.sector_id,
-            (mapaContagemProd.get(p.sector_id) || 0) + 1
-          );
-        }
-      }
-      setQtdProdutosPorSetor(mapaContagemProd);
-
-      // Filtra carrinhos finalizados no mês vigente conforme o fuso horário do grupo
-      const fuso = grp?.fuso_horario || "America/Cuiaba";
-      const idsFinalizadosNoMes = new Set(
-        carrinhosFinalizados
-          .filter((c) =>
-            pertenceAoMesAtualNoFuso(c.finalizado_em || c.criado_em, fuso)
-          )
-          .map((c) => c.id)
-      );
-
-      // Soma (preço real × quantidade) dos itens de carrinhos finalizados no mês (incluindo itens sem setor / avulsos)
-      const mapaGasto = new Map<string, number>();
-      for (const item of todosItens) {
-        if (!idsFinalizadosNoMes.has(item.cart_id)) continue;
-        // Considera itens marcados (ou todos caso algum carrinho antigo não tenha desmarcado)
-        if (item.marcado === false) continue;
-
-        const secId =
-          item.sector_id_avulso ||
-          (item.product_id ? mapaProdSetor.get(item.product_id) : null) ||
-          "sem_setor";
-
-        const precoUnit =
-          item.preco_real !== null && item.preco_real !== undefined
-            ? Number(item.preco_real)
-            : Number(item.preco_estimado || 0);
-        const subtotal = precoUnit * Number(item.quantidade || 0);
-
-        mapaGasto.set(secId, (mapaGasto.get(secId) || 0) + subtotal);
-      }
-
-      setGastoPorSetor(mapaGasto);
+      const cfgIA = await carregarConfigIADoGrupo(supabase, gId);
+      setConfigIA(cfgIA);
     } catch {
       // Falha silenciosa de rede
     } finally {
@@ -165,45 +229,310 @@ export default function OrcamentoPage() {
     carregarDados();
   }, [carregarDados]);
 
-  // Totais gerais do mês
-  const { gastoTotalMes, orcamentoTotalMes, percentualTotal, gastoSemSetor } =
-    useMemo(() => {
-      let somaGasto = 0;
-      let somaOrcamento = 0;
+  const fuso = grupo?.fuso_horario || "America/Cuiaba";
+  const anoMesAtual = useMemo(
+    () => extrairAnoMesNoFuso(new Date(), fuso),
+    [fuso]
+  );
+  const ehMesAtual = anoMesSelecionado === anoMesAtual;
 
-      for (const s of setores) {
-        somaGasto += gastoPorSetor.get(s.id) || 0;
-        if (s.orcamento_mensal !== null && Number(s.orcamento_mensal) > 0) {
-          somaOrcamento += Number(s.orcamento_mensal);
+  // Mapas auxiliares de produtos, setores e mercados
+  const { mapaProdutos, qtdProdutosPorSetor, mapaMercados, mapaSetores } =
+    useMemo(() => {
+      const mProd = new Map<string, Product>();
+      const mCont = new Map<string, number>();
+      for (const p of produtos) {
+        if (p.codigo_barras === "__config_ia_grupo__") continue;
+        mProd.set(p.id, p);
+        if (p.sector_id && !ehProdutoInternoSistema(p.codigo_barras)) {
+          mCont.set(p.sector_id, (mCont.get(p.sector_id) || 0) + 1);
         }
       }
+      const mMkt = new Map<string, Market>();
+      for (const m of mercados) mMkt.set(m.id, m);
 
-      const semSetor = gastoPorSetor.get("sem_setor") || 0;
-      somaGasto += semSetor;
-
-      const perc =
-        somaOrcamento > 0 ? Math.round((somaGasto / somaOrcamento) * 100) : 0;
+      const mSec = new Map<string, Sector>();
+      for (const s of setores) mSec.set(s.id, s);
 
       return {
-        gastoTotalMes: somaGasto,
-        orcamentoTotalMes: somaOrcamento,
-        percentualTotal: perc,
-        gastoSemSetor: semSetor,
+        mapaProdutos: mProd,
+        qtdProdutosPorSetor: mCont,
+        mapaMercados: mMkt,
+        mapaSetores: mSec,
       };
-    }, [setores, gastoPorSetor]);
+    }, [produtos, mercados, setores]);
 
-  // Define as cores reservadas exclusivamente ao orçamento (Seção 6 e 4-orcamento.html)
+  // Cálculos completos do mês selecionado + histórico 6 meses + dashboards
+  const analise = useMemo(() => {
+    // 1. Mapeia cada carrinho finalizado para seu YYYY-MM no fuso do grupo
+    const cartAnoMes = new Map<string, string>();
+    const cartMap = new Map<string, Cart>();
+    for (const c of carrinhosFinalizados) {
+      cartAnoMes.set(c.id, extrairAnoMesNoFuso(c.finalizado_em || c.criado_em, fuso));
+      cartMap.set(c.id, c);
+    }
+
+    // 2. Soma gasto por mês (para os últimos 6 meses a partir do mês selecionado)
+    const gastoPorAnoMes = new Map<string, number>();
+    const gastoPorSetorMes = new Map<string, number>();
+    const gastoPorCarrinhoMes = new Map<string, number>();
+    const mapaTopProdutos = new Map<string, TopProdutoItem>();
+
+    for (const item of todosItens) {
+      const am = cartAnoMes.get(item.cart_id);
+      if (!am) continue;
+      if (item.marcado === false) continue;
+
+      const precoUnit =
+        item.preco_real !== null && item.preco_real !== undefined
+          ? Number(item.preco_real)
+          : Number(item.preco_estimado || 0);
+      const qtd = Number(item.quantidade || 0);
+      const subtotal = precoUnit * qtd;
+      if (subtotal <= 0) continue;
+
+      gastoPorAnoMes.set(am, (gastoPorAnoMes.get(am) || 0) + subtotal);
+
+      if (am !== anoMesSelecionado) continue;
+
+      gastoPorCarrinhoMes.set(
+        item.cart_id,
+        (gastoPorCarrinhoMes.get(item.cart_id) || 0) + subtotal
+      );
+
+      const prod = item.product_id ? mapaProdutos.get(item.product_id) : undefined;
+      const secId = item.sector_id_avulso || prod?.sector_id || "sem_setor";
+      gastoPorSetorMes.set(secId, (gastoPorSetorMes.get(secId) || 0) + subtotal);
+
+      // Agrupa Top Produtos do mês
+      const chaveProd = prod?.id || `avulso:${(item.descricao_avulsa || "Avulso").toLowerCase()}`;
+      const nomeProd = prod?.nome || item.descricao_avulsa || "Item avulso";
+      const setorProd = secId !== "sem_setor" ? mapaSetores.get(secId) : undefined;
+      const emojiProd = prod?.emoji || setorProd?.emoji || "📦";
+      const unidadeProd = prod?.unidade || "un";
+
+      const atualProd = mapaTopProdutos.get(chaveProd);
+      if (atualProd) {
+        atualProd.quantidadeTotal += qtd;
+        atualProd.gastoTotal += subtotal;
+        atualProd.ocorrencias += 1;
+      } else {
+        mapaTopProdutos.set(chaveProd, {
+          nome: nomeProd,
+          emoji: emojiProd,
+          quantidadeTotal: qtd,
+          unidade: unidadeProd,
+          gastoTotal: subtotal,
+          ocorrencias: 1,
+        });
+      }
+    }
+
+    // 3. Totais e setores estourados
+    let gastoTotalMes = 0;
+    let orcamentoTotalMes = 0;
+    let qtdSetoresEstourados = 0;
+
+    for (const s of setores) {
+      const gasto = gastoPorSetorMes.get(s.id) || 0;
+      gastoTotalMes += gasto;
+      if (s.orcamento_mensal !== null && Number(s.orcamento_mensal) > 0) {
+        const orc = Number(s.orcamento_mensal);
+        orcamentoTotalMes += orc;
+        if (gasto / orc > LIMITE_ORCAMENTO_ESTOURO) {
+          qtdSetoresEstourados += 1;
+        }
+      }
+    }
+    const gastoSemSetor = gastoPorSetorMes.get("sem_setor") || 0;
+    gastoTotalMes += gastoSemSetor;
+
+    const percentualTotal =
+      orcamentoTotalMes > 0
+        ? Math.round((gastoTotalMes / orcamentoTotalMes) * 100)
+        : 0;
+
+    // 4. Projeção do mês atual (ritmo diário)
+    let projecaoMes: number | null = null;
+    if (ehMesAtual && gastoTotalMes > 0) {
+      const hoje = new Date();
+      const diaAtual = Math.max(1, hoje.getDate());
+      const diasNoMes = new Date(
+        hoje.getFullYear(),
+        hoje.getMonth() + 1,
+        0
+      ).getDate();
+      if (diaAtual >= 3 && diaAtual < diasNoMes) {
+        projecaoMes = (gastoTotalMes / diaAtual) * diasNoMes;
+      }
+    }
+
+    // 5. Evolução dos últimos 6 meses até o mês selecionado
+    const evolucao6Meses: EvolucaoMesItem[] = [];
+    for (let i = -5; i <= 0; i++) {
+      const am = deslocarAnoMes(anoMesSelecionado, i);
+      const mesIdx = Number(am.split("-")[1]) - 1;
+      evolucao6Meses.push({
+        anoMes: am,
+        labelCurto: MESES_CURTOS[mesIdx] || am,
+        gasto: gastoPorAnoMes.get(am) || 0,
+        atual: i === 0,
+      });
+    }
+
+    // 6. Resumo de setores para a IA
+    const setoresResumo: SetorResumoItem[] = setores
+      .map((s) => {
+        const gasto = gastoPorSetorMes.get(s.id) || 0;
+        return {
+          id: s.id,
+          nome: s.nome,
+          emoji: s.emoji,
+          gasto,
+          orcamento: s.orcamento_mensal ? Number(s.orcamento_mensal) : 0,
+          percentualDoTotal:
+            gastoTotalMes > 0 ? Math.round((gasto / gastoTotalMes) * 100) : 0,
+        };
+      })
+      .filter((s) => s.gasto > 0 || s.orcamento > 0)
+      .sort((a, b) => b.gasto - a.gasto);
+
+    // 7. Top Produtos do mês
+    const topProdutos = Array.from(mapaTopProdutos.values()).sort(
+      (a, b) => b.gastoTotal - a.gastoTotal
+    );
+
+    // 8. Resumo por Mercado no mês
+    const mapaMktGasto = new Map<string, { total: number; compras: number }>();
+    for (const [cartId, totalCart] of gastoPorCarrinhoMes.entries()) {
+      const c = cartMap.get(cartId);
+      const nomeMkt =
+        (c?.market_id ? mapaMercados.get(c.market_id)?.nome : null) ||
+        "Sem mercado";
+      const cur = mapaMktGasto.get(nomeMkt) || { total: 0, compras: 0 };
+      cur.total += totalCart;
+      cur.compras += 1;
+      mapaMktGasto.set(nomeMkt, cur);
+    }
+    const mercadosResumo: MercadoResumoItem[] = Array.from(
+      mapaMktGasto.entries()
+    )
+      .map(([nome, info]) => ({
+        nome,
+        gastoTotal: info.total,
+        compras: info.compras,
+        ticketMedio: info.compras > 0 ? info.total / info.compras : 0,
+      }))
+      .sort((a, b) => b.gastoTotal - a.gastoTotal);
+
+    // 9. Resumo por Forma de Pagamento no mês
+    const mapaPg = new Map<string, number>();
+    let totalPagamentosMes = 0;
+    for (const pg of todosPagamentos) {
+      if (cartAnoMes.get(pg.cart_id) !== anoMesSelecionado) continue;
+      const val = Number(pg.valor || 0);
+      if (val <= 0) continue;
+      mapaPg.set(pg.forma_pagamento, (mapaPg.get(pg.forma_pagamento) || 0) + val);
+      totalPagamentosMes += val;
+    }
+    const pagamentosResumo: PagamentoResumoItem[] = Array.from(mapaPg.entries())
+      .map(([forma, valor]) => ({
+        forma,
+        valor,
+        percentual:
+          totalPagamentosMes > 0
+            ? Math.round((valor / totalPagamentosMes) * 100)
+            : 0,
+      }))
+      .sort((a, b) => b.valor - a.valor);
+
+    // 10. Inflação da Casa (último preço vs. média anterior do mesmo produto)
+    const precosPorProd = new Map<string, Price[]>();
+    for (const pr of todosPrecos) {
+      if (pr.tipo === "atacado") continue;
+      const arr = precosPorProd.get(pr.product_id) || [];
+      arr.push(pr);
+      precosPorProd.set(pr.product_id, arr);
+    }
+
+    const variacoes: VariacaoPrecoItem[] = [];
+    for (const [prodId, lista] of precosPorProd.entries()) {
+      if (lista.length < 2) continue;
+      const prod = mapaProdutos.get(prodId);
+      if (!prod || ehProdutoInternoSistema(prod.codigo_barras)) continue;
+
+      const ultimo = Number(lista[0].valor);
+      const anteriores = lista.slice(1, 6).map((x) => Number(x.valor));
+      const mediaAnterior =
+        anteriores.reduce((acc, v) => acc + v, 0) / anteriores.length;
+      if (mediaAnterior <= 0) continue;
+
+      const variacaoPct = Math.round(
+        ((ultimo - mediaAnterior) / mediaAnterior) * 100
+      );
+      if (Math.abs(variacaoPct) < 5) continue;
+
+      const sec = prod.sector_id ? mapaSetores.get(prod.sector_id) : undefined;
+      variacoes.push({
+        nome: prod.nome,
+        emoji: prod.emoji || sec?.emoji || "📦",
+        ultimoValor: ultimo,
+        mediaAnterior,
+        variacaoPct,
+      });
+    }
+
+    const maisSubiram = variacoes
+      .filter((v) => v.variacaoPct > 0)
+      .sort((a, b) => b.variacaoPct - a.variacaoPct)
+      .slice(0, 3);
+
+    const maisCairam = variacoes
+      .filter((v) => v.variacaoPct < 0)
+      .sort((a, b) => a.variacaoPct - b.variacaoPct)
+      .slice(0, 3);
+
+    return {
+      gastoPorSetorMes,
+      gastoTotalMes,
+      orcamentoTotalMes,
+      percentualTotal,
+      gastoSemSetor,
+      qtdSetoresEstourados,
+      projecaoMes,
+      evolucao6Meses,
+      setoresResumo,
+      topProdutos,
+      mercadosResumo,
+      pagamentosResumo,
+      maisSubiram,
+      maisCairam,
+    };
+  }, [
+    carrinhosFinalizados,
+    todosItens,
+    todosPagamentos,
+    todosPrecos,
+    setores,
+    mapaProdutos,
+    mapaMercados,
+    mapaSetores,
+    anoMesSelecionado,
+    ehMesAtual,
+    fuso,
+  ]);
+
   function obterCoresOrcamento(razao: number): {
     corBarra: string;
     corTexto: string;
   } {
     if (razao > LIMITE_ORCAMENTO_ESTOURO) {
-      return { corBarra: "#D64545", corTexto: "#B3261E" }; // Vermelho (> 100%)
+      return { corBarra: "#D64545", corTexto: "#B3261E" };
     }
     if (razao >= LIMITE_ORCAMENTO_ALERTA) {
-      return { corBarra: "#E8A200", corTexto: "#7A5000" }; // Amarelo (80% a 100%)
+      return { corBarra: "#E8A200", corTexto: "#7A5000" };
     }
-    return { corBarra: "#1F9D57", corTexto: "#14783F" }; // Verde (até 80%)
+    return { corBarra: "#1F9D57", corTexto: "#14783F" };
   }
 
   function abrirModalNovoSetor() {
@@ -259,7 +588,6 @@ export default function OrcamentoPage() {
       const supabase = createClient();
 
       if (setorEditando) {
-        // Atualização otimista na lista local
         setSetores((antigos) =>
           antigos.map((s) =>
             s.id === setorEditando.id
@@ -302,14 +630,13 @@ export default function OrcamentoPage() {
             orcamento_mensal: valorOrcamento,
             ordem: proximaOrdem,
           })
-          .select("*")
+          .select()
           .single();
 
         if (error) {
           setErroForm("Não foi possível criar o setor.");
           return;
         }
-
         if (novo) {
           setSetores((antigos) => [...antigos, novo as Sector]);
         }
@@ -317,7 +644,7 @@ export default function OrcamentoPage() {
 
       setModalAberto(false);
     } catch {
-      setErroForm("Erro de conexão ao salvar o setor.");
+      setErroForm("Erro ao salvar. Tente novamente.");
     } finally {
       setSalvando(false);
     }
@@ -327,25 +654,20 @@ export default function OrcamentoPage() {
     if (!setorEditando) return;
     setExcluindo(true);
     setErroForm(null);
-
     try {
       const supabase = createClient();
       const { error } = await supabase
         .from("sectors")
         .delete()
         .eq("id", setorEditando.id);
-
       if (error) {
         setErroForm("Não foi possível excluir este setor.");
         return;
       }
-
-      setSetores((antigos) =>
-        antigos.filter((s) => s.id !== setorEditando.id)
-      );
+      setSetores((antigos) => antigos.filter((s) => s.id !== setorEditando.id));
       setModalAberto(false);
     } catch {
-      setErroForm("Erro ao excluir setor.");
+      setErroForm("Erro ao excluir o setor.");
     } finally {
       setExcluindo(false);
     }
@@ -357,54 +679,63 @@ export default function OrcamentoPage() {
 
   if (carregando) {
     return (
-      <div className="min-h-screen flex flex-col bg-background text-text-main pb-24">
-        <main className="flex-1 w-full max-w-md mx-auto px-5 pt-5 flex flex-col gap-3">
+      <div className="min-h-screen flex flex-col bg-background text-text-main pb-24 md:pl-64">
+        <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-5 pt-5 flex flex-col gap-3">
           <div className="h-12 w-48 bg-border/70 rounded-xl animate-pulse" />
-          <div className="h-32 w-full bg-border/70 rounded-[20px] animate-pulse" />
-          {[1, 2, 3, 4, 5, 6].map((n) => (
-            <div
-              key={n}
-              className="h-16 w-full bg-border/70 rounded-[14px] animate-pulse"
-            />
-          ))}
+          <div className="h-36 w-full bg-border/70 rounded-[20px] animate-pulse" />
+          <div className="h-44 w-full bg-border/70 rounded-[20px] animate-pulse" />
+          <div className="h-44 w-full bg-border/70 rounded-[20px] animate-pulse" />
         </main>
         <BottomNav />
       </div>
     );
   }
 
-  // Formata o mês atual usando o fuso horário do grupo (ex: Outubro de 2026)
-  let mesAnoFormatado = "Mês atual";
-  try {
-    const fmt = new Intl.DateTimeFormat("pt-BR", {
-      month: "long",
-      year: "numeric",
-      timeZone: grupo?.fuso_horario || "America/Cuiaba",
-    });
-    const txt = fmt.format(new Date());
-    mesAnoFormatado = txt.charAt(0).toUpperCase() + txt.slice(1);
-  } catch {
-    mesAnoFormatado = "Mês atual";
-  }
-
+  const mesAnoFormatado = formatarAnoMesCompleto(anoMesSelecionado);
   const razaoTotal =
-    orcamentoTotalMes > 0 ? gastoTotalMes / orcamentoTotalMes : 0;
+    analise.orcamentoTotalMes > 0
+      ? analise.gastoTotalMes / analise.orcamentoTotalMes
+      : 0;
   const coresTotais = obterCoresOrcamento(razaoTotal);
   const larguraBarraTotal =
-    orcamentoTotalMes > 0
-      ? Math.min(100, Math.round((gastoTotalMes / orcamentoTotalMes) * 100))
+    analise.orcamentoTotalMes > 0
+      ? Math.min(
+          100,
+          Math.round((analise.gastoTotalMes / analise.orcamentoTotalMes) * 100)
+        )
       : 0;
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-text-main pb-28 md:pb-8 md:pl-64">
-      <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-3">
-        {/* Cabeçalho fiel à referência 4-orcamento.html */}
-        <div className="flex items-center justify-between h-12">
-          <div>
-            <div className="text-[13px] text-text-muted font-medium">
-              {mesAnoFormatado}
+    <div className="min-h-screen flex flex-col bg-background text-text-main pb-24 md:pb-8 md:pl-64">
+      <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-3.5">
+        {/* Cabeçalho com seletor de mês + botão Novo Setor */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 text-xs text-text-muted font-semibold">
+              <button
+                type="button"
+                onClick={() =>
+                  setAnoMesSelecionado((prev) => deslocarAnoMes(prev, -1))
+                }
+                aria-label="Mês anterior"
+                className="w-6 h-6 rounded-full hover:bg-card hover:text-text-main flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="truncate">{mesAnoFormatado}</span>
+              <button
+                type="button"
+                disabled={ehMesAtual}
+                onClick={() =>
+                  setAnoMesSelecionado((prev) => deslocarAnoMes(prev, 1))
+                }
+                aria-label="Próximo mês"
+                className="w-6 h-6 rounded-full hover:bg-card hover:text-text-main flex items-center justify-center transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
-            <h1 className="m-0 text-[28px] font-extrabold leading-[1.2]">
+            <h1 className="m-0 text-[26px] font-extrabold leading-[1.15]">
               Orçamento
             </h1>
           </div>
@@ -419,140 +750,196 @@ export default function OrcamentoPage() {
           </button>
         </div>
 
-        {/* Card Principal: Gasto total do mês (4-orcamento.html) */}
-        <div className="bg-card border border-border rounded-[20px] px-[18px] py-4 shadow-sm">
-          <div className="text-[13px] text-text-muted font-semibold">
-            Gasto total do mês
-          </div>
-          <div className="flex items-baseline gap-2 mt-1 flex-wrap">
-            <span className="text-[28px] sm:text-[30px] font-extrabold leading-none">
-              {formatarMoeda(gastoTotalMes)}
-            </span>
-            <span className="text-[13px] text-text-muted font-medium">
-              {orcamentoTotalMes > 0
-                ? `de ${formatarMoeda(orcamentoTotalMes)}`
-                : "sem teto mensal definido"}
-            </span>
+        {/* Card Principal: Gasto total do mês + Setinha para abrir/recolher Metas por Setor */}
+        <div className="bg-card border border-border rounded-[20px] shadow-sm overflow-hidden">
+          <div className="px-[18px] pt-4 pb-3.5">
+            <div className="text-[13px] text-text-muted font-semibold">
+              Gasto total do mês
+            </div>
+            <div className="flex items-baseline gap-2 mt-1 flex-wrap">
+              <span className="text-[28px] sm:text-[30px] font-extrabold leading-none">
+                {formatarMoeda(analise.gastoTotalMes)}
+              </span>
+              <span className="text-[13px] text-text-muted font-medium">
+                {analise.orcamentoTotalMes > 0
+                  ? `de ${formatarMoeda(analise.orcamentoTotalMes)}`
+                  : "sem teto mensal definido"}
+              </span>
+            </div>
+
+            <div className="h-[10px] rounded-[5px] bg-border mt-2.5 overflow-hidden">
+              <div
+                className="h-full transition-all duration-300"
+                style={{
+                  width: `${larguraBarraTotal}%`,
+                  backgroundColor: coresTotais.corBarra,
+                }}
+              />
+            </div>
+
+            <div className="text-[12px] text-text-muted mt-2">
+              {analise.orcamentoTotalMes <= 0 ? (
+                <span>
+                  Abra as metas por setor abaixo para definir seus limites
+                </span>
+              ) : analise.gastoTotalMes <= analise.orcamentoTotalMes ? (
+                <span>
+                  {analise.percentualTotal}% do orçamento · faltam{" "}
+                  {formatarMoeda(
+                    analise.orcamentoTotalMes - analise.gastoTotalMes
+                  )}
+                </span>
+              ) : (
+                <span
+                  className="font-bold"
+                  style={{ color: coresTotais.corTexto }}
+                >
+                  {analise.percentualTotal}% do orçamento · acima em{" "}
+                  {formatarMoeda(
+                    analise.gastoTotalMes - analise.orcamentoTotalMes
+                  )}
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="h-[10px] rounded-[5px] bg-border mt-2.5 overflow-hidden">
-            <div
-              className="h-full transition-all duration-300"
-              style={{
-                width: `${larguraBarraTotal}%`,
-                backgroundColor: coresTotais.corBarra,
-              }}
+          {/* Barra clicável com setinha para expandir/recolher as categorias e cotas */}
+          <button
+            type="button"
+            onClick={() => setSetoresExpandidos((prev) => !prev)}
+            aria-expanded={setoresExpandidos}
+            className="w-full px-[18px] py-2.5 bg-background/60 hover:bg-background border-t border-border flex items-center justify-between gap-2 text-xs font-bold text-text-main transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="truncate">
+                {setoresExpandidos
+                  ? "Ocultar metas por setor"
+                  : `Ver metas por setor (${setores.length})`}
+              </span>
+              {!setoresExpandidos && analise.qtdSetoresEstourados > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-budget-red-bg text-budget-red-text text-[10px] font-extrabold shrink-0">
+                  {analise.qtdSetoresEstourados}{" "}
+                  {analise.qtdSetoresEstourados === 1
+                    ? "estourado"
+                    : "estourados"}
+                </span>
+              )}
+            </div>
+            <ChevronDown
+              className={`w-4 h-4 text-text-muted shrink-0 transition-transform duration-200 ${
+                setoresExpandidos ? "rotate-180 text-primary" : ""
+              }`}
             />
-          </div>
-
-          <div className="text-[12px] text-text-muted mt-2">
-            {orcamentoTotalMes <= 0 ? (
-              <span>
-                Toque em qualquer setor abaixo para definir o valor mensal
-              </span>
-            ) : gastoTotalMes <= orcamentoTotalMes ? (
-              <span>
-                {percentualTotal}% do orçamento · faltam{" "}
-                {formatarMoeda(orcamentoTotalMes - gastoTotalMes)}
-              </span>
-            ) : (
-              <span
-                className="font-bold"
-                style={{ color: coresTotais.corTexto }}
-              >
-                {percentualTotal}% do orçamento · acima em{" "}
-                {formatarMoeda(gastoTotalMes - orcamentoTotalMes)}
-              </span>
-            )}
-          </div>
+          </button>
         </div>
 
-        {/* Lista de Setores com barras coloridas em grid responsivo (4-orcamento.html) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {setores.map((setor) => {
-            const gasto = gastoPorSetor.get(setor.id) || 0;
-            const orcamento =
-              setor.orcamento_mensal !== null
-                ? Number(setor.orcamento_mensal)
+        {/* Lista Expansível de Setores (para configurar limites/cotas como antes) */}
+        {setoresExpandidos && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 animate-in fade-in duration-150">
+            {setores.map((setor) => {
+              const gasto = analise.gastoPorSetorMes.get(setor.id) || 0;
+              const orcamento =
+                setor.orcamento_mensal !== null
+                  ? Number(setor.orcamento_mensal)
+                  : 0;
+              const temOrcamento = orcamento > 0;
+              const razao = temOrcamento ? gasto / orcamento : 0;
+              const percentual = temOrcamento ? Math.round(razao * 100) : 0;
+              const larguraBarra = temOrcamento
+                ? Math.min(100, Math.max(gasto > 0 ? 2 : 0, percentual))
                 : 0;
-            const temOrcamento = orcamento > 0;
-            const razao = temOrcamento ? gasto / orcamento : 0;
-            const percentual = temOrcamento ? Math.round(razao * 100) : 0;
-            const larguraBarra = temOrcamento
-              ? Math.min(100, Math.max(gasto > 0 ? 2 : 0, percentual))
-              : 0;
-            const cores = obterCoresOrcamento(razao);
+              const cores = obterCoresOrcamento(razao);
 
-            return (
-              <button
-                key={setor.id}
-                type="button"
-                onClick={() => abrirModalEditarSetor(setor)}
-                className="w-full text-left bg-card border border-border rounded-[14px] px-[14px] py-[9px] flex flex-col gap-[6px] hover:border-primary/50 transition-colors cursor-pointer"
-              >
+              return (
+                <button
+                  key={setor.id}
+                  type="button"
+                  onClick={() => abrirModalEditarSetor(setor)}
+                  className="w-full text-left bg-card border border-border rounded-[14px] px-[14px] py-[9px] flex flex-col gap-[6px] hover:border-primary/50 transition-colors cursor-pointer"
+                >
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-[14px] font-bold truncate">
+                      {setor.emoji} {setor.nome}
+                    </span>
+                    {temOrcamento ? (
+                      <span className="text-[12px] text-text-muted shrink-0">
+                        {formatarMoeda(gasto)} / {formatarMoeda(orcamento)}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold shrink-0">
+                        {gasto > 0 && (
+                          <span className="text-text-muted font-semibold">
+                            {formatarMoeda(gasto)}
+                          </span>
+                        )}
+                        <span className="px-2 py-0.5 rounded-full bg-primary-light text-primary-hover">
+                          Definir valor
+                        </span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-[10px]">
+                    <div className="flex-1 h-[8px] rounded-[4px] bg-border overflow-hidden">
+                      <div
+                        className="h-full transition-all duration-300"
+                        style={{
+                          width: `${larguraBarra}%`,
+                          backgroundColor: temOrcamento
+                            ? cores.corBarra
+                            : "transparent",
+                        }}
+                      />
+                    </div>
+                    <span
+                      className="w-[40px] text-right text-[12px] font-bold shrink-0"
+                      style={{
+                        color: temOrcamento ? cores.corTexto : "#5B6270",
+                      }}
+                    >
+                      {temOrcamento ? `${percentual}%` : "—"}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+
+            {analise.gastoSemSetor > 0 && (
+              <div className="w-full text-left bg-card border border-dashed border-border rounded-[14px] px-[14px] py-[11px] flex flex-col gap-1">
                 <div className="flex justify-between items-center gap-2">
                   <span className="text-[14px] font-bold truncate">
-                    {setor.emoji} {setor.nome}
+                    🧾 Avulsos / Sem setor
                   </span>
-                  {temOrcamento ? (
-                    <span className="text-[12px] text-text-muted shrink-0">
-                      {formatarMoeda(gasto)} / {formatarMoeda(orcamento)}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold shrink-0">
-                      {gasto > 0 && (
-                        <span className="text-text-muted font-semibold">
-                          {formatarMoeda(gasto)}
-                        </span>
-                      )}
-                      <span className="px-2 py-0.5 rounded-full bg-primary-light text-primary-hover">
-                        Definir valor
-                      </span>
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-[10px]">
-                  <div className="flex-1 h-[8px] rounded-[4px] bg-border overflow-hidden">
-                    <div
-                      className="h-full transition-all duration-300"
-                      style={{
-                        width: `${larguraBarra}%`,
-                        backgroundColor: temOrcamento
-                          ? cores.corBarra
-                          : "transparent",
-                      }}
-                    />
-                  </div>
-                  <span
-                    className="w-[40px] text-right text-[12px] font-bold shrink-0"
-                    style={{
-                      color: temOrcamento ? cores.corTexto : "#5B6270",
-                    }}
-                  >
-                    {temOrcamento ? `${percentual}%` : "—"}
+                  <span className="text-[12px] font-extrabold text-text-main shrink-0">
+                    {formatarMoeda(analise.gastoSemSetor)}
                   </span>
                 </div>
-              </button>
-            );
-          })}
-
-          {gastoSemSetor > 0 && (
-            <div className="w-full text-left bg-card border border-dashed border-border rounded-[14px] px-[14px] py-[11px] flex flex-col gap-1">
-              <div className="flex justify-between items-center gap-2">
-                <span className="text-[14px] font-bold truncate">
-                  🧾 Avulsos / Sem setor
-                </span>
-                <span className="text-[12px] font-extrabold text-text-main shrink-0">
-                  {formatarMoeda(gastoSemSetor)}
-                </span>
+                <p className="text-[11px] text-text-muted leading-snug">
+                  Compras avulsas ou produtos sem setor definido (já somados no
+                  gasto total do mês). Você pode atribuir um setor pelo
+                  Histórico.
+                </p>
               </div>
-              <p className="text-[11px] text-text-muted leading-snug">
-                Compras avulsas ou produtos sem setor definido (já somados no gasto total do mês). Você pode atribuir um setor pelo Histórico.
-              </p>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
+
+        {/* Dashboards e Assistente de IA */}
+        <BudgetAnalyticsDashboard
+          mesLabel={mesAnoFormatado}
+          ehMesAtual={ehMesAtual}
+          gastoTotalMes={analise.gastoTotalMes}
+          orcamentoTotalMes={analise.orcamentoTotalMes}
+          projecaoMes={analise.projecaoMes}
+          evolucao6Meses={analise.evolucao6Meses}
+          setoresResumo={analise.setoresResumo}
+          topProdutos={analise.topProdutos}
+          mercadosResumo={analise.mercadosResumo}
+          pagamentosResumo={analise.pagamentosResumo}
+          maisSubiram={analise.maisSubiram}
+          maisCairam={analise.maisCairam}
+          configIA={configIA}
+        />
       </main>
 
       {/* Modal / Bottom Sheet para Criar ou Editar Setor */}
@@ -649,7 +1036,6 @@ export default function OrcamentoPage() {
                   className="w-full h-12 px-3.5 rounded-xl border border-border bg-background text-base font-extrabold focus:outline-none focus:border-primary"
                 />
 
-                {/* Atalhos rápidos de orçamento */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {SUGESTOES_ORCAMENTO.map((val) => {
                     const txt = val.toFixed(2).replace(".", ",");
@@ -678,7 +1064,9 @@ export default function OrcamentoPage() {
                     Gasto acumulado neste mês:
                   </span>
                   <span className="font-extrabold text-text-main">
-                    {formatarMoeda(gastoPorSetor.get(setorEditando.id) || 0)}
+                    {formatarMoeda(
+                      analise.gastoPorSetorMes.get(setorEditando.id) || 0
+                    )}
                   </span>
                 </div>
               )}
@@ -686,7 +1074,7 @@ export default function OrcamentoPage() {
               <button
                 type="submit"
                 disabled={salvando}
-                className="w-full h-12 mt-1 rounded-btn bg-primary hover:bg-primary-hover text-white font-extrabold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-60"
+                className="w-full h-12 mt-1 rounded-full bg-primary hover:bg-primary-hover text-white font-extrabold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-60"
               >
                 <Check className="w-4 h-4" />
                 <span>
