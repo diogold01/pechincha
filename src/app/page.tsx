@@ -551,9 +551,9 @@ export default function HomePage() {
             type="button"
             onClick={handleSair}
             title="Sair da conta"
-            className="h-11 px-3.5 rounded-full bg-card border border-border flex items-center gap-1.5 text-xs font-bold text-text-muted hover:text-text-main cursor-pointer shadow-sm transition-colors"
+            className="h-9 px-3.5 rounded-full bg-card border border-border flex items-center gap-1.5 text-xs font-bold text-text-muted hover:text-text-main cursor-pointer shadow-2xs transition-colors"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-3.5 h-3.5" />
             <span>Sair</span>
           </button>
         </div>
@@ -571,10 +571,10 @@ export default function HomePage() {
                 Gasto em {nomeMesMinusculo}
               </div>
               <div className="flex items-baseline gap-2 mt-1 flex-wrap">
-                <span className="text-[32px] font-extrabold leading-none">
+                <span className="text-[28px] sm:text-[30px] font-extrabold leading-none">
                   {formatarMoeda(gastoTotalMes)}
                 </span>
-                <span className="text-[14px] text-text-muted font-medium">
+                <span className="text-[13px] text-text-muted font-medium">
                   {orcamentoTotalMes > 0
                     ? `de ${formatarMoeda(orcamentoTotalMes)}`
                     : "toque para definir o orçamento"}
@@ -680,19 +680,19 @@ export default function HomePage() {
                     />
                   </div>
                 )}
-                <div className="mt-3.5 h-12 rounded-btn bg-white text-primary font-extrabold text-[15px] flex items-center justify-center gap-2">
+                <div className="mt-3 h-10 rounded-full bg-white text-primary font-extrabold text-sm flex items-center justify-center gap-2">
                   <span>Continuar compra</span>
                   <ArrowRight className="w-4 h-4" />
                 </div>
               </Link>
             )}
 
-            {/* Botão Nova Compra conforme 1-inicio.html */}
+            {/* Botão Nova Compra padronizado */}
             <Link
               href="/compra?nova=1"
-              className="h-12 rounded-btn border-2 border-primary text-primary font-bold text-[15px] bg-card hover:bg-primary-light/40 flex items-center justify-center gap-2 transition-colors shadow-sm"
+              className="h-11 rounded-full bg-primary hover:bg-primary-hover text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors shadow-sm"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 shrink-0" />
               <span>Nova compra</span>
             </Link>
           </div>
@@ -740,7 +740,7 @@ export default function HomePage() {
                           disabled={copiando}
                           onClick={() => handleRepetirCarrinho(resumo.cart.id)}
                           aria-label={`Repetir ${resumo.cart.nome}`}
-                          className="h-10 px-3.5 rounded-full bg-primary-light text-primary-hover text-[12px] font-bold flex items-center justify-center shrink-0 hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60"
+                          className="h-8 px-3 rounded-full bg-primary-light text-primary-hover text-xs font-bold flex items-center justify-center shrink-0 hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-60"
                         >
                           {copiando ? "Copiando..." : "Repetir"}
                         </button>
@@ -753,14 +753,14 @@ export default function HomePage() {
 
             {/* Card de Grupo e Convite para a segunda pessoa (Etapa 2) */}
             <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
                     <Users className="w-5 h-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <h2 className="text-base font-extrabold leading-snug">
+                      <h2 className="text-base font-extrabold leading-snug truncate">
                         {grupo.nome}
                       </h2>
                       <button
@@ -770,12 +770,12 @@ export default function HomePage() {
                           setModalEditarGrupo(true);
                         }}
                         aria-label="Renomear grupo"
-                        className="p-1 rounded-lg text-text-muted hover:text-primary hover:bg-primary-light transition-colors cursor-pointer"
+                        className="p-1 rounded-lg text-text-muted hover:text-primary hover:bg-primary-light transition-colors cursor-pointer shrink-0"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <p className="text-xs text-text-muted">
+                    <p className="text-xs text-text-muted whitespace-nowrap">
                       {membros.length}{" "}
                       {membros.length === 1
                         ? "pessoa no grupo"
@@ -783,8 +783,13 @@ export default function HomePage() {
                     </p>
                   </div>
                 </div>
-                <span className="px-2.5 py-1 rounded-full bg-primary-light text-primary-hover text-[11px] font-bold">
-                  {grupo.fuso_horario}
+                <span className="px-2.5 py-1 rounded-full bg-primary-light text-primary-hover text-[11px] font-bold shrink-0">
+                  {grupo.fuso_horario === "America/Cuiaba"
+                    ? "Cuiabá"
+                    : grupo.fuso_horario === "America/Sao_Paulo"
+                      ? "Brasília"
+                      : grupo.fuso_horario.split("/").pop()?.replace(/_/g, " ") ||
+                        grupo.fuso_horario}
                 </span>
               </div>
 
@@ -904,13 +909,13 @@ export default function HomePage() {
                   type="button"
                   onClick={handleGerarConvite}
                   disabled={gerandoConvite}
-                  className="h-12 rounded-btn border-2 border-primary text-primary font-bold text-sm bg-card hover:bg-primary-light/50 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  className="h-10 px-4 rounded-full bg-primary-light hover:bg-primary-soft text-primary-hover font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
-                  <UserPlus className="w-4 h-4" />
-                  <span>
+                  <UserPlus className="w-4 h-4 shrink-0" />
+                  <span className="truncate">
                     {gerandoConvite
                       ? "Gerando código..."
-                      : "Convidar segunda pessoa para o grupo"}
+                      : "Convidar pessoa para o grupo"}
                   </span>
                 </button>
               )}

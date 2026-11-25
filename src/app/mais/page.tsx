@@ -529,14 +529,14 @@ export default function MaisPage() {
             <div className="flex flex-col gap-5">
               {/* 1. MERCADOS */}
               <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
                     <Store className="w-5 h-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h2 className="text-base font-extrabold">Mercados</h2>
-                    <p className="text-xs text-text-muted">
+                    <p className="text-xs text-text-muted leading-snug">
                       Um mercado é o padrão para novos carrinhos
                     </p>
                   </div>
@@ -544,9 +544,9 @@ export default function MaisPage() {
                 <button
                   type="button"
                   onClick={abrirNovoMercado}
-                  className="h-11 px-3.5 rounded-xl bg-primary text-white font-bold text-xs flex items-center gap-1.5 hover:bg-primary-hover cursor-pointer"
+                  className="h-9 px-3.5 rounded-full bg-primary text-white font-bold text-xs flex items-center gap-1.5 hover:bg-primary-hover cursor-pointer shrink-0 shadow-sm transition-colors"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   <span>Novo</span>
                 </button>
               </div>
@@ -612,16 +612,16 @@ export default function MaisPage() {
 
             {/* 2. SETORES */}
             <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
                     <Layers className="w-5 h-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h2 className="text-base font-extrabold">
                       Setores ({setores.length})
                     </h2>
-                    <p className="text-xs text-text-muted">
+                    <p className="text-xs text-text-muted leading-snug">
                       Toque em um setor para editar nome ou emoji
                     </p>
                   </div>
@@ -629,9 +629,9 @@ export default function MaisPage() {
                 <button
                   type="button"
                   onClick={abrirNovoSetor}
-                  className="h-11 px-3.5 rounded-xl bg-primary text-white font-bold text-xs flex items-center gap-1.5 hover:bg-primary-hover cursor-pointer"
+                  className="h-9 px-3.5 rounded-full bg-primary text-white font-bold text-xs flex items-center gap-1.5 hover:bg-primary-hover cursor-pointer shrink-0 shadow-sm transition-colors"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   <span>Novo</span>
                 </button>
               </div>
@@ -642,9 +642,9 @@ export default function MaisPage() {
                     key={s.id}
                     type="button"
                     onClick={() => abrirEditarSetor(s)}
-                    className="h-11 px-3.5 rounded-full bg-background border border-border hover:border-primary flex items-center gap-2 text-xs font-bold text-text-main transition-colors cursor-pointer"
+                    className="h-9 px-3 rounded-full bg-background border border-border hover:border-primary flex items-center gap-1.5 text-xs font-bold text-text-main transition-colors cursor-pointer"
                   >
-                    <span className="text-base leading-none">{s.emoji}</span>
+                    <span className="text-sm leading-none">{s.emoji}</span>
                     <span>{s.nome}</span>
                     <Pencil className="w-3 h-3 text-text-muted ml-0.5" />
                   </button>
@@ -657,14 +657,14 @@ export default function MaisPage() {
           <div className="flex flex-col gap-5">
             {/* 3. CONFIGURAÇÕES DE PREÇO E FUSO */}
             <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
                     <Settings className="w-5 h-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h2 className="text-base font-extrabold">Configurações</h2>
-                    <p className="text-xs text-text-muted">
+                    <p className="text-xs text-text-muted leading-snug">
                       Cálculo do preço estimado:{" "}
                       <strong className="text-text-main">
                         {settings?.metodo_preco === "ultimo"
@@ -679,7 +679,7 @@ export default function MaisPage() {
                 <button
                   type="button"
                   onClick={() => setSheetConfigAberto(true)}
-                  className="h-11 px-3.5 rounded-xl bg-background border border-border font-bold text-xs text-text-main hover:border-primary cursor-pointer"
+                  className="h-8 px-3 rounded-full bg-primary-light text-primary-hover font-bold text-xs hover:opacity-90 transition-opacity cursor-pointer shrink-0"
                 >
                   Ajustar
                 </button>
@@ -722,7 +722,7 @@ export default function MaisPage() {
                 <button
                   type="button"
                   onClick={abrirConfigIA}
-                  className="h-11 px-3.5 rounded-xl bg-background border border-border font-bold text-xs text-text-main hover:border-primary cursor-pointer shrink-0"
+                  className="h-8 px-3 rounded-full bg-primary-light text-primary-hover font-bold text-xs hover:opacity-90 transition-opacity cursor-pointer shrink-0"
                 >
                   Configurar
                 </button>
@@ -734,68 +734,67 @@ export default function MaisPage() {
               <button
                 type="button"
                 onClick={() => router.push("/mais/cupom")}
-                className="flex items-center justify-between py-2.5 px-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
+                className="flex items-center justify-between gap-3 py-2.5 px-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
                     <QrCode className="w-5 h-5" />
                   </div>
-                  <div>
-                    <div className="text-sm font-extrabold text-text-main flex items-center gap-1.5">
-                      <span>Importar Cupom Fiscal</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-primary text-white">Novo</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-extrabold text-text-main flex items-center gap-1.5 flex-wrap">
+                      <span>Importar Cupom</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary text-white leading-none">Novo</span>
                     </div>
-                    <div className="text-xs text-text-muted">
-                      Ler QR Code da nota, PDF ou link para gerar carrinho automático
+                    <div className="text-xs text-text-muted leading-snug">
+                      QR Code, PDF ou link da nota fiscal
                     </div>
                   </div>
                 </div>
-                <span className="h-9 px-3 rounded-xl bg-primary-light text-primary-hover font-bold text-xs flex items-center justify-center shrink-0">
+                <span className="h-8 px-3 rounded-full bg-primary-light text-primary-hover font-bold text-xs flex items-center justify-center shrink-0">
                   Importar
                 </span>
               </button>
               <button
                 type="button"
                 onClick={() => router.push("/historico")}
-                className="flex items-center justify-between py-2.5 px-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
+                className="flex items-center justify-between gap-3 py-2.5 px-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
                     <History className="w-5 h-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm font-extrabold text-text-main">
                       Histórico de carrinhos
                     </div>
-                    <div className="text-xs text-text-muted">
-                      Ver compras anteriores, gastos por setor e repetir lista
+                    <div className="text-xs text-text-muted leading-snug">
+                      Ver compras anteriores e repetir lista
                     </div>
                   </div>
                 </div>
-                <span className="h-9 px-3 rounded-xl bg-primary-light text-primary-hover font-bold text-xs flex items-center justify-center shrink-0">
+                <span className="h-8 px-3 rounded-full bg-primary-light text-primary-hover font-bold text-xs flex items-center justify-center shrink-0">
                   Abrir
                 </span>
               </button>
               <button
                 type="button"
                 onClick={() => router.push("/exportar")}
-                className="flex items-center justify-between py-2.5 px-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
+                className="flex items-center justify-between gap-3 py-2.5 px-1 text-left hover:opacity-80 transition-opacity cursor-pointer"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center shrink-0">
                     <Download className="w-5 h-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm font-extrabold text-text-main">
-                      Exportar CSV, Backup e App
+                      Exportar e Backup
                     </div>
-                    <div className="text-xs text-text-muted">
-                      Planilha para finanças, backup completo e instalar no
-                      celular
+                    <div className="text-xs text-text-muted leading-snug">
+                      Planilha CSV, backup completo e instalar app
                     </div>
                   </div>
                 </div>
-                <span className="h-9 px-3 rounded-xl bg-primary-light text-primary-hover font-bold text-xs flex items-center justify-center shrink-0">
+                <span className="h-8 px-3 rounded-full bg-primary-light text-primary-hover font-bold text-xs flex items-center justify-center shrink-0">
                   Abrir
                 </span>
               </button>

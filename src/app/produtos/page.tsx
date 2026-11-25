@@ -495,36 +495,37 @@ export default function ProdutosPage() {
     <div className="min-h-screen flex flex-col bg-background text-text-main pb-28 md:pb-8 md:pl-64">
       <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-4">
         {/* Cabeçalho */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-[13px] text-text-muted font-medium">
-              Catálogo e Histórico de Preços
-            </div>
-            <h1 className="text-[28px] font-extrabold leading-tight">
+        <div className="flex flex-col gap-0.5">
+          <div className="text-xs text-text-muted font-medium truncate">
+            Catálogo e Histórico de Preços
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-[26px] font-extrabold leading-tight truncate">
               Produtos
             </h1>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {produtos.length > 0 && (
+            <div className="flex items-center gap-2 shrink-0">
+              {produtos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setModalOrganizarIAAberto(true)}
+                  className="h-9 px-3 rounded-full bg-card border border-border hover:border-primary text-primary font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
+                  title="Formatar nomes, tirar marcas e sugerir ícones com IA"
+                >
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                  <span className="sm:hidden">IA</span>
+                  <span className="hidden sm:inline">Organizar com IA</span>
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setModalOrganizarIAAberto(true)}
-                className="h-11 px-3 sm:px-3.5 rounded-btn bg-card border border-border hover:border-primary text-primary font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                title="Formatar nomes, tirar marcas e sugerir ícones com IA"
+                onClick={abrirNovoProduto}
+                className="h-9 px-3.5 rounded-full bg-primary hover:bg-primary-hover text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-colors"
               >
-                <Sparkles className="w-4 h-4 shrink-0" />
-                <span className="sm:hidden">IA</span>
-                <span className="hidden sm:inline">Organizar com IA</span>
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span className="sm:hidden">Novo</span>
+                <span className="hidden sm:inline">Novo produto</span>
               </button>
-            )}
-            <button
-              type="button"
-              onClick={abrirNovoProduto}
-              className="h-11 px-3.5 sm:px-4 rounded-btn bg-primary hover:bg-primary-hover text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <Plus className="w-4 h-4 shrink-0" />
-              <span>Novo produto</span>
-            </button>
+            </div>
           </div>
         </div>
 
@@ -637,35 +638,30 @@ export default function ProdutosPage() {
                 <div
                   key={prod.id}
                   onClick={() => setProdutoDetalheId(prod.id)}
-                  className="bg-card border border-border hover:border-primary/50 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm cursor-pointer transition-colors"
+                  className="bg-card border border-border hover:border-primary/50 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 shadow-sm cursor-pointer transition-colors"
                 >
-                  <div className="w-11 h-11 rounded-xl bg-background flex items-center justify-center text-xl shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-background flex items-center justify-center text-lg shrink-0">
                     {emojiExibido}
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="text-[15px] font-bold text-text-main truncate">
+                    <div className="text-[14px] font-bold text-text-main truncate">
                       {prod.nome}
                     </div>
-                    <div className="text-xs text-text-muted flex items-center gap-1.5 truncate">
-                      <span>{setor?.nome || "Sem setor"}</span>
-                      <span>·</span>
-                      <span>por {prod.unidade}</span>
+                    <div className="text-xs text-text-muted truncate mt-0.5">
+                      {setor?.nome || "Sem setor"} · por {prod.unidade}
                       {stats.precosAtacado.length > 0 && (
-                        <>
-                          <span>·</span>
-                          <span className="text-primary font-semibold">
-                            tem atacado
-                          </span>
-                        </>
+                        <span className="text-primary font-semibold">
+                          {" "}· tem atacado
+                        </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 pl-1">
                     {stats.estimado !== null ? (
                       <>
-                        <div className="text-[15px] font-extrabold text-text-main">
+                        <div className="text-[14px] font-extrabold text-text-main">
                           {formatarMoeda(stats.estimado)}
                         </div>
                         <div className="text-[11px] font-semibold text-text-muted">

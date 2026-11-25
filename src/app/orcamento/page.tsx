@@ -412,23 +412,23 @@ export default function OrcamentoPage() {
           <button
             type="button"
             onClick={abrirModalNovoSetor}
-            className="flex items-center gap-1 h-11 px-3.5 rounded-full bg-primary-light text-primary-hover text-[13px] font-bold hover:opacity-90 transition-opacity cursor-pointer"
+            className="flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-sm transition-colors cursor-pointer shrink-0"
           >
-            <Plus className="w-4 h-4 stroke-[2.4]" />
+            <Plus className="w-3.5 h-3.5 stroke-[2.4]" />
             <span>Setor</span>
           </button>
         </div>
 
         {/* Card Principal: Gasto total do mês (4-orcamento.html) */}
-        <div className="bg-card border border-border rounded-[20px] px-[18px] py-4">
+        <div className="bg-card border border-border rounded-[20px] px-[18px] py-4 shadow-sm">
           <div className="text-[13px] text-text-muted font-semibold">
             Gasto total do mês
           </div>
           <div className="flex items-baseline gap-2 mt-1 flex-wrap">
-            <span className="text-[30px] font-extrabold leading-none">
+            <span className="text-[28px] sm:text-[30px] font-extrabold leading-none">
               {formatarMoeda(gastoTotalMes)}
             </span>
-            <span className="text-[14px] text-text-muted">
+            <span className="text-[13px] text-text-muted font-medium">
               {orcamentoTotalMes > 0
                 ? `de ${formatarMoeda(orcamentoTotalMes)}`
                 : "sem teto mensal definido"}
@@ -452,7 +452,7 @@ export default function OrcamentoPage() {
               </span>
             ) : gastoTotalMes <= orcamentoTotalMes ? (
               <span>
-                {percentualTotal}% usado · faltam{" "}
+                {percentualTotal}% do orçamento · faltam{" "}
                 {formatarMoeda(orcamentoTotalMes - gastoTotalMes)}
               </span>
             ) : (
@@ -460,7 +460,7 @@ export default function OrcamentoPage() {
                 className="font-bold"
                 style={{ color: coresTotais.corTexto }}
               >
-                {percentualTotal}% usado · acima em{" "}
+                {percentualTotal}% do orçamento · acima em{" "}
                 {formatarMoeda(gastoTotalMes - orcamentoTotalMes)}
               </span>
             )}
@@ -499,9 +499,15 @@ export default function OrcamentoPage() {
                       {formatarMoeda(gasto)} / {formatarMoeda(orcamento)}
                     </span>
                   ) : (
-                    <span className="text-[12px] font-semibold text-primary shrink-0">
-                      {gasto > 0 ? `${formatarMoeda(gasto)} · ` : ""}defina um
-                      valor
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold shrink-0">
+                      {gasto > 0 && (
+                        <span className="text-text-muted font-semibold">
+                          {formatarMoeda(gasto)}
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded-full bg-primary-light text-primary-hover">
+                        Definir valor
+                      </span>
                     </span>
                   )}
                 </div>

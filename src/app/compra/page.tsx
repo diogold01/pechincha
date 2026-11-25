@@ -1376,10 +1376,10 @@ function CompraPlanejamentoContent() {
       <GuestConversionBanner onConverted={carregarDados} />
       <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-5 md:px-8 pt-5 md:pt-8 flex flex-col gap-4 min-w-0 max-w-full">
         {/* Topo: Seletor de Carrinho e Botão Novo Carrinho */}
-        <div className="flex items-center justify-between gap-2 w-full min-w-0">
-          <div className="min-w-0 flex-1">
-            <div className="text-[13px] text-text-muted font-medium flex items-center gap-2 truncate">
-              <span className="truncate">Planejamento de Compra</span>
+        <div className="flex flex-col gap-1.5 w-full min-w-0">
+          <div className="flex items-center justify-between gap-2 w-full min-w-0">
+            <div className="text-xs text-text-muted font-medium flex items-center gap-1.5 min-w-0">
+              <span className="truncate">Planejamento</span>
               {aoVivoConectado && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-light text-primary-hover text-[11px] font-bold shrink-0">
                   <span
@@ -1391,41 +1391,43 @@ function CompraPlanejamentoContent() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 min-w-0">
-              <h1 className="text-[24px] font-extrabold leading-tight truncate">
-                {carrinhoAtual ? carrinhoAtual.nome : "Carrinho"}
-              </h1>
-              {carrinhoAtual && (
-                <button
-                  type="button"
-                  onClick={abrirModalEditarCarrinho}
-                  className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center text-text-muted hover:text-text-main shrink-0 cursor-pointer"
-                  title="Editar nome ou mercado do carrinho"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              )}
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setModalAvulsoAberto(true)}
+                className="h-9 px-2.5 sm:px-3 rounded-full bg-card border border-border hover:border-primary text-text-main font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
+                title="Lançar gasto rápido ou compra sem cupom"
+              >
+                <Receipt className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="hidden sm:inline">Avulsa</span>
+              </button>
+              <button
+                type="button"
+                onClick={abrirModalNovoCarrinho}
+                className="h-9 px-3.5 rounded-full bg-primary hover:bg-primary-hover text-white font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span className="sm:hidden">Novo</span>
+                <span className="hidden sm:inline">Novo carrinho</span>
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setModalAvulsoAberto(true)}
-              className="h-11 px-3 rounded-btn bg-card border border-border hover:border-primary text-text-main font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
-              title="Lançar gasto rápido ou compra sem cupom"
-            >
-              <Receipt className="w-4 h-4 text-primary" />
-              <span className="hidden sm:inline">Avulsa</span>
-            </button>
-            <button
-              type="button"
-              onClick={abrirModalNovoCarrinho}
-              className="h-11 px-3.5 rounded-btn bg-card border border-border hover:border-primary text-primary font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Novo carrinho</span>
-            </button>
+          <div className="flex items-center gap-2 min-w-0">
+            <h1 className="text-[22px] sm:text-[26px] font-extrabold leading-tight truncate">
+              {carrinhoAtual ? carrinhoAtual.nome : "Carrinho"}
+            </h1>
+            {carrinhoAtual && (
+              <button
+                type="button"
+                onClick={abrirModalEditarCarrinho}
+                className="w-7 h-7 rounded-full bg-card border border-border flex items-center justify-center text-text-muted hover:text-text-main shrink-0 cursor-pointer transition-colors"
+                title="Editar nome ou mercado do carrinho"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -1778,16 +1780,16 @@ function CompraPlanejamentoContent() {
           </div>
 
           {/* COLUNA DIREITA (Desktop: 5 colunas sticky) — Estimativa e Ação */}
-          <div className="lg:col-span-5 flex flex-col gap-4 order-1 lg:order-2 lg:sticky lg:top-6">
+          <div className="lg:col-span-5 flex flex-col gap-4 order-1 lg:order-2 lg:sticky lg:top-6 min-w-0">
             {/* CARD DE ESTIMATIVA GERAL DO CARRINHO + MERCADO ESCOLHIDO */}
-            <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3 shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs font-semibold text-text-muted">
+            <section className="bg-card border border-border rounded-card p-4 sm:p-5 flex flex-col gap-3 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="min-w-0 shrink-0">
+                  <div className="text-xs font-semibold text-text-muted whitespace-nowrap">
                     Total estimado · {itensCarrinho.length}{" "}
                     {itensCarrinho.length === 1 ? "item" : "itens"}
                   </div>
-                  <div className="text-3xl font-extrabold text-text-main mt-0.5">
+                  <div className="text-2xl sm:text-3xl font-extrabold text-text-main mt-0.5 whitespace-nowrap">
                     {formatarMoeda(totalEstimadoCarrinho)}
                   </div>
                 </div>
@@ -1800,13 +1802,13 @@ function CompraPlanejamentoContent() {
                       ? abrirModalEditarCarrinho
                       : abrirModalNovoCarrinho
                   }
-                  className="h-11 px-3.5 rounded-full bg-background border border-border hover:border-primary flex items-center gap-1.5 text-xs font-bold text-text-main shrink-0 cursor-pointer shadow-sm"
+                  className="h-9 px-3 rounded-full bg-background border border-border hover:border-primary flex items-center gap-1.5 text-xs font-bold text-text-main min-w-0 max-w-[54%] cursor-pointer shadow-2xs transition-colors"
                 >
-                  <Store className="w-4 h-4 text-primary" />
-                  <span className="max-w-[120px] truncate">
+                  <Store className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span className="truncate">
                     {mercadoAtualNome}
                   </span>
-                  <ChevronDown className="w-4 h-4 text-text-muted" />
+                  <ChevronDown className="w-3.5 h-3.5 text-text-muted shrink-0" />
                 </button>
               </div>
 

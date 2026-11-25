@@ -887,22 +887,22 @@ export default function ImportarCupomPage() {
             PASSO 1: ENTRADA DO CUPOM (CÂMERA QR CODE / UPLOAD PDF / LINK)
            ========================================================================= */}
         {passo === 1 && (
-          <div className="bg-card border border-border rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col gap-5">
+          <div className="bg-card border border-border rounded-3xl p-4 sm:p-6 shadow-sm flex flex-col gap-4">
             {/* Controle rápido da IA opcional */}
-            <div className="rounded-2xl border border-border bg-background/70 px-3.5 py-3 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    temIAConfigurada(configIA)
-                      ? "bg-primary text-white"
-                      : "bg-primary-light text-primary"
-                  }`}
-                >
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-extrabold text-text-main">
+            <div className="rounded-2xl border border-border bg-background/70 px-3.5 py-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                      temIAConfigurada(configIA)
+                        ? "bg-primary text-white"
+                        : "bg-primary-light text-primary"
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                    <span className="text-xs font-extrabold text-text-main shrink-0">
                       {temIAConfigurada(configIA)
                         ? "IA Ativa"
                         : configIA.apiKey.trim().length >= 15
@@ -910,7 +910,7 @@ export default function ImportarCupomPage() {
                         : "IA Opcional"}
                     </span>
                     {temIAConfigurada(configIA) && (
-                      <span className="text-[10px] font-bold bg-primary-light text-primary px-2 py-0.5 rounded-full truncate">
+                      <span className="text-[10px] font-bold bg-primary-light text-primary px-2 py-0.5 rounded-full">
                         {MODELOS_IA_DISPONIVEIS.find((m) => m.id === configIA.modelo)?.nome.replace(
                           " (Recomendado)",
                           ""
@@ -918,66 +918,66 @@ export default function ImportarCupomPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-text-muted truncate">
-                    {temIAConfigurada(configIA)
-                      ? "Limpa nomes, extrai marcas e sugere setores na leitura."
-                      : configIA.apiKey.trim().length >= 15
-                      ? "Chave salva. Ligue se quiser limpar nomes e marcas agora."
-                      : "Use uma chave gratuita do Google AI Studio em Mais."}
-                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {configIA.apiKey.trim().length >= 15 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={alternarIAAtivaRapido}
+                        className={`h-8 px-3 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                          configIA.ativada
+                            ? "bg-card border border-border text-text-main hover:border-primary"
+                            : "bg-primary text-white hover:bg-primary-hover"
+                        }`}
+                      >
+                        {configIA.ativada ? "Desligar" : "Ligar IA"}
+                      </button>
+                      <Link
+                        href="/mais"
+                        title="Configurações da IA em Mais"
+                        className="w-8 h-8 rounded-full bg-card border border-border text-text-muted hover:text-text-main flex items-center justify-center transition-colors"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                      </Link>
+                    </>
+                  ) : (
+                    <Link
+                      href="/mais"
+                      className="h-8 px-3 rounded-full bg-primary-light text-primary text-xs font-bold flex items-center gap-1 hover:opacity-90 transition-opacity"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                      <span>Configurar</span>
+                    </Link>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                {configIA.apiKey.trim().length >= 15 ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={alternarIAAtivaRapido}
-                      className={`h-9 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        configIA.ativada
-                          ? "bg-card border border-border text-text-main hover:border-primary"
-                          : "bg-primary text-white hover:bg-primary-hover"
-                      }`}
-                    >
-                      {configIA.ativada ? "Desligar" : "Ligar IA"}
-                    </button>
-                    <Link
-                      href="/mais"
-                      title="Configurações da IA em Mais"
-                      className="w-9 h-9 rounded-xl bg-card border border-border text-text-muted hover:text-text-main flex items-center justify-center transition-colors"
-                    >
-                      <Settings className="w-4 h-4" />
-                    </Link>
-                  </>
-                ) : (
-                  <Link
-                    href="/mais"
-                    className="h-9 px-3 rounded-xl bg-primary-light text-primary text-xs font-bold flex items-center gap-1 hover:opacity-90 transition-opacity"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>Configurar</span>
-                  </Link>
-                )}
-              </div>
+              <p className="text-[11px] text-text-muted leading-snug">
+                {temIAConfigurada(configIA)
+                  ? "Limpa nomes, extrai marcas e sugere setores automaticamente na leitura."
+                  : configIA.apiKey.trim().length >= 15
+                  ? "Chave salva. Ligue se quiser limpar nomes e marcas agora."
+                  : "Use uma chave gratuita do Google AI Studio em Mais."}
+              </p>
             </div>
 
             {/* Seletor de Método de Importação */}
-            <div className="grid grid-cols-3 bg-background p-1 rounded-2xl border border-border">
+            <div className="grid grid-cols-3 gap-1 bg-background p-1 rounded-2xl border border-border">
               <button
                 type="button"
                 onClick={() => {
                   setAbaEntrada("camera");
                   setErro(null);
                 }}
-                className={`h-11 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                className={`h-9 px-1.5 rounded-xl font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
                   abaEntrada === "camera"
                     ? "bg-card text-primary shadow-xs"
                     : "text-text-muted hover:text-text-main"
                 }`}
               >
-                <QrCode className="w-4 h-4" />
-                <span className="hidden sm:inline">Câmera</span>
+                <QrCode className="w-3.5 h-3.5 shrink-0" />
                 <span>QR Code</span>
               </button>
 
@@ -987,14 +987,14 @@ export default function ImportarCupomPage() {
                   setAbaEntrada("pdf");
                   setErro(null);
                 }}
-                className={`h-11 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                className={`h-9 px-1.5 rounded-xl font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
                   abaEntrada === "pdf"
                     ? "bg-card text-primary shadow-xs"
                     : "text-text-muted hover:text-text-main"
                 }`}
               >
-                <FileText className="w-4 h-4" />
-                <span>Upload PDF</span>
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+                <span>PDF</span>
               </button>
 
               <button
@@ -1003,14 +1003,14 @@ export default function ImportarCupomPage() {
                   setAbaEntrada("link");
                   setErro(null);
                 }}
-                className={`h-11 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                className={`h-9 px-1.5 rounded-xl font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1 transition-all whitespace-nowrap cursor-pointer ${
                   abaEntrada === "link"
                     ? "bg-card text-primary shadow-xs"
                     : "text-text-muted hover:text-text-main"
                 }`}
               >
-                <Link2 className="w-4 h-4" />
-                <span>Colar Link</span>
+                <Link2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Link</span>
               </button>
             </div>
 

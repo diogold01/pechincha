@@ -5,12 +5,13 @@ import {
   Camera,
   CameraOff,
   RefreshCw,
-  ZoomIn,
   Image as ImageIcon,
   AlertCircle,
   Sparkles,
   Maximize2,
   Minimize2,
+  Crosshair,
+  Info,
 } from "lucide-react";
 
 interface QrCodeScannerProps {
@@ -450,14 +451,15 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
 
       {/* Dica de toque para focar */}
       {iniciado && !erroCamera && (
-        <div className="w-full max-w-md flex items-center justify-between px-1">
-          <p className="text-[11px] font-bold text-primary flex items-center gap-1.5 animate-pulse">
-            <span>👆 Toque na tela para focar o papel</span>
+        <div className="w-full max-w-md flex items-center justify-between gap-2 px-1">
+          <p className="text-[11px] font-bold text-primary flex items-center gap-1.5 min-w-0 truncate">
+            <Crosshair className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Toque na tela para focar</span>
           </p>
           <button
             type="button"
             onClick={() => setTelaCheia((prev) => !prev)}
-            className="text-[11px] font-bold text-text-muted hover:text-text-main flex items-center gap-1 transition-colors cursor-pointer"
+            className="text-[11px] font-bold text-text-muted hover:text-text-main flex items-center gap-1 transition-colors cursor-pointer shrink-0"
           >
             {telaCheia ? (
               <>
@@ -467,7 +469,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
             ) : (
               <>
                 <Maximize2 className="w-3.5 h-3.5" />
-                <span>Expandir tela</span>
+                <span>Expandir</span>
               </>
             )}
           </button>
@@ -478,16 +480,16 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
       <div
         onClick={handleToqueFocar}
         className={`relative w-full max-w-md bg-black rounded-3xl overflow-hidden border-2 border-border shadow-md flex items-center justify-center cursor-pointer select-none transition-all duration-300 ${
-          telaCheia ? "h-[540px] sm:h-[600px]" : "h-[400px] sm:h-[450px]"
+          telaCheia ? "h-[480px] sm:h-[560px]" : "h-[330px] sm:h-[400px]"
         }`}
         title="Toque na tela para focar a câmera"
       >
         <div id={elementId} className="w-full h-full object-cover" />
 
-        {/* Guia de mira visual quando a câmera estiver ativa */}
+        {/* Guia de mira visual única quando a câmera estiver ativa */}
         {iniciado && !erroCamera && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="w-64 h-64 border-2 border-primary/70 rounded-3xl relative animate-pulse shadow-inner">
+            <div className="w-56 h-56 border-2 border-primary/70 rounded-3xl relative shadow-inner">
               <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-xl" />
               <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-xl" />
               <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-xl" />
@@ -587,15 +589,14 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
             <button
               type="button"
               onClick={() => alternarZoom(2)}
-              className={`h-8 px-3 rounded-full text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+              className={`h-8 px-3 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 zoomAtual === 2
                   ? "bg-primary text-white shadow-2xs"
                   : "text-text-muted hover:text-text-main"
               }`}
               title="Aumenta o zoom para focar o papel a 25cm"
             >
-              <ZoomIn className="w-3 h-3" />
-              <span>2.0x</span>
+              2.0x
             </button>
           </div>
 
@@ -625,10 +626,10 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="w-full h-12 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
+          className="w-full h-11 px-4 bg-primary-light hover:bg-primary-soft text-primary-hover rounded-full font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
         >
-          <Camera className="w-4 h-4" />
-          <span>Tirar foto com o app da câmera (Foco Nítido Garantido)</span>
+          <Camera className="w-4 h-4 shrink-0" />
+          <span>Tirar foto pelo app da câmera</span>
         </button>
 
         <button
@@ -636,7 +637,7 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
           onClick={() => galleryInputRef.current?.click()}
           className="text-xs font-semibold text-text-muted hover:text-text-main flex items-center justify-center gap-1.5 transition-colors cursor-pointer py-1"
         >
-          <ImageIcon className="w-3.5 h-3.5" />
+          <ImageIcon className="w-3.5 h-3.5 shrink-0" />
           <span>Ou escolher foto do cupom na galeria</span>
         </button>
 
@@ -658,8 +659,11 @@ export default function QrCodeScanner({ onScan, ativo }: QrCodeScannerProps) {
         />
 
         {/* Dica simples de leitura */}
-        <p className="text-[11px] text-text-muted text-center px-2">
-          💡 Se a imagem estiver embaçada, selecione a <strong>Lente Principal 1x</strong> no topo, ou use o botão de tirar foto pelo app da câmera.
+        <p className="text-[11px] text-text-muted flex items-start justify-center gap-1.5 text-center px-2">
+          <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-primary" />
+          <span>
+            Se a imagem estiver embaçada, selecione <strong>1.0x (Nítida)</strong> abaixo da câmera ou use o botão de tirar foto pelo app da câmera.
+          </span>
         </p>
       </div>
 
