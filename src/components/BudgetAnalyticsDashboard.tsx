@@ -15,6 +15,10 @@ import {
   Lightbulb,
   ShoppingBag,
   RefreshCw,
+  PieChart,
+  Receipt,
+  CalendarDays,
+  ShoppingCart,
 } from "lucide-react";
 import { formatarMoeda } from "@/lib/format";
 import { temIAConfigurada, type ConfigIA } from "@/lib/ia-config";
@@ -40,6 +44,13 @@ export interface TopProdutoItem {
   emoji: string;
   quantidadeTotal: number;
   unidade: string;
+  gastoTotal: number;
+  ocorrencias: number;
+}
+
+export interface AvulsoItemResumo {
+  nome: string;
+  emoji: string;
   gastoTotal: number;
   ocorrencias: number;
 }
@@ -77,9 +88,14 @@ interface BudgetAnalyticsDashboardProps {
   gastoTotalMes: number;
   orcamentoTotalMes: number;
   projecaoMes: number | null;
+  qtdComprasMes: number;
+  ticketMedioMes: number;
+  gastoPorDia: number;
   evolucao6Meses: EvolucaoMesItem[];
   setoresResumo: SetorResumoItem[];
   topProdutos: TopProdutoItem[];
+  avulsosItens: AvulsoItemResumo[];
+  totalAvulsosMes: number;
   mercadosResumo: MercadoResumoItem[];
   pagamentosResumo: PagamentoResumoItem[];
   maisSubiram: VariacaoPrecoItem[];
@@ -89,9 +105,36 @@ interface BudgetAnalyticsDashboardProps {
 
 const PERGUNTAS_RAPIDAS = [
   "Onde posso economizar?",
-  "O que mais pesou no mês?",
+  "O que mais pesou?",
   "Resumo dos mercados",
+  "Quanto foi no VA?",
 ];
+
+const CORES_DONUT = [
+  "#3B4CCA", // Azul Pechincha
+  "#10B981", // Esmeralda
+  "#F59E0B", // Âmbar
+  "#EC4899", // Rosa
+  "#8B5CF6", // Violeta
+  "#94A3B8", // Cinza (Outros)
+];
+
+function corFormaPagamento(forma: string): string {
+  const f = forma.toLowerCase();
+  if (f.includes("pix")) return "#10B981";
+  if (f.includes("crédito") || f.includes("credito")) return "#3B4CCA";
+  if (f.includes("vale")) return "#F59E0B";
+  if (f.includes("débito") || f.includes("debito")) return "#0EA5E9";
+  if (f.includes("dinheiro")) return "#8B5CF6";
+  return "#94A3B8";
+}
+
+function formatarCompacto(valor: number): string {
+  if (valor >= 1000) {
+    return `${(valor / 1000).toFixed(1).replace(".", ",")}k`;
+  }
+  return String(Math.round(valor));
+}
 
 export default function BudgetAnalyticsDashboard({
   mesLabel,
@@ -99,9 +142,14 @@ export default function BudgetAnalyticsDashboard({
   gastoTotalMes,
   orcamentoTotalMes,
   projecaoMes,
+  qtdComprasMes,
+  ticketMedioMes,
+  gastoPorDia,
   evolucao6Meses,
   setoresResumo,
   topProdutos,
+  avulsosItens,
+  totalAvulsosMes,
   mercadosResumo,
   pagamentosResumo,
   maisSubiram,
@@ -121,11 +169,13 @@ export default function BudgetAnalyticsDashboard({
   const [perguntando, setPerguntando] = useState(false);
   const [respostaIA, setRespostaIA] = useState<string | null>(null);
 
-  // Limpa respostas da IA ao trocar de mês
+  const [abaRanking, setAbaRanking] = useState<"produtos" | "avulsos">("produtos");
+
   useEffect(() => {
     setResumoIA(null);
     setRespostaIA(null);
     setErroIA(null);
+    setAbaRanking("produtos");
   }, [mesLabel]);
 
   function montarContextoIA() {
@@ -134,6 +184,9 @@ export default function BudgetAnalyticsDashboard({
       gastoTotal: Number(gastoTotalMes.toFixed(2)),
       orcamentoTotal: Number(orcamentoTotalMes.toFixed(2)),
       projecaoFechamento: projecaoMes ? Number(projecaoMes.toFixed(2)) : null,
+      comprasNoMes: qtdComprasMes,
+      ticketMedio: Number(ticketMedioMes.toFixed(2)),
+      gastoPorDia: Number(gastoPorDia.toFixed(2)),
       evolucaoUltimos6Meses: evolucao6Meses.map((e) => ({
         mes: e.labelCurto,
         gasto: Number(e.gasto.toFixed(2)),
@@ -150,6 +203,7 @@ export default function BudgetAnalyticsDashboard({
         qtd: Number(p.quantidadeTotal.toFixed(2)),
         unidade: p.unidade,
       })),
+      gastosAvulsosTotal: Number(totalAvulsosMes.toFixed(2)),
       mercados: mercadosResumo.slice(0, 6).map((m) => ({
         nome: m.nome,
         gasto: Number(m.gastoTotal.toFixed(2)),
@@ -242,51 +296,130 @@ export default function BudgetAnalyticsDashboard({
     }
   }
 
-  const maxEvolucao = Math.max(
-    orcamentoTotalMes > 0 ? orcamentoTotalMes : 0,
-    ...evolucao6Meses.map((e) => e.gasto),
-    1
-  );
-
-  const alturaLinhaTeto =
-    orcamentoTotalMes > 0
-      ? Math.min(100, Math.round((orcamentoTotalMes / maxEvolucao) * 100))
-      : null;
-
   const temDadosMes = gastoTotalMes > 0;
 
+  // Dados preparados para o Gráfico de Rosca (Donut) de Setores
+  const setoresComGasto = setoresResumo.filter((s) => s.gasto > 0);
+  const fatiasDonut: {
+    label: string;
+    emoji: string;
+    valor: number;
+    pct: number;
+    cor: string;
+  }[] = [];
+
+  if (setoresComGasto.length > 0 && gastoTotalMes > 0) {
+    const top5 = setoresComGasto.slice(0, 5);
+    let somaTop = 0;
+    top5.forEach((s, i) => {
+      somaTop += s.gasto;
+      fatiasDonut.push({
+        label: s.nome,
+        emoji: s.emoji,
+        valor: s.gasto,
+        pct: Math.round((s.gasto / gastoTotalMes) * 100),
+        cor: CORES_DONUT[i % 5],
+      });
+    });
+    const restante = Math.max(0, gastoTotalMes - somaTop);
+    if (restante > 0.5) {
+      fatiasDonut.push({
+        label: "Outros",
+        emoji: "•",
+        valor: restante,
+        pct: Math.max(1, Math.round((restante / gastoTotalMes) * 100)),
+        cor: CORES_DONUT[5],
+      });
+    }
+  }
+
+  const raioDonut = 48;
+  const circDonut = 2 * Math.PI * raioDonut;
+
+  // Geometria SVG para o gráfico Evolução (6 meses) sem colisões de texto
+  const maxValorGrafico =
+    Math.max(
+      orcamentoTotalMes > 0 ? orcamentoTotalMes : 0,
+      ...evolucao6Meses.map((e) => e.gasto),
+      1
+    ) * 1.18;
+
+  const svgW = 320;
+  const svgH = 152;
+  const plotTop = 24;
+  const plotBottom = 126;
+  const plotH = plotBottom - plotTop;
+
+  const yTeto =
+    orcamentoTotalMes > 0
+      ? plotBottom - (orcamentoTotalMes / maxValorGrafico) * plotH
+      : null;
+
   return (
-    <div className="flex flex-col gap-4 mt-1">
-      {/* Título da seção Analytics */}
-      <div className="flex items-center justify-between px-0.5">
-        <div className="flex items-center gap-1.5">
-          <BarChart3 className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-extrabold text-text-main">
-            Análises e Dashboards
+    <div className="flex flex-col gap-3.5 mt-1">
+      {/* Cabeçalho da seção Analytics */}
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <BarChart3 className="w-4 h-4 text-primary shrink-0" />
+          <h2 className="text-sm font-extrabold text-text-main truncate">
+            Dashboard do Mês
           </h2>
         </div>
         {ehMesAtual && projecaoMes !== null && projecaoMes > 0 && (
-          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-primary-light text-primary-hover">
+          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-primary-light text-primary-hover whitespace-nowrap shrink-0">
             Previsão: {formatarMoeda(projecaoMes)}
           </span>
         )}
       </div>
 
-      {/* 1. ASSISTENTE DE IA (SOB DEMANDA) */}
-      <section className="bg-card border border-border rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
+      {/* 1. FAIXA DE KPIs RÁPIDOS (3 MINI-CARDS) */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <div className="bg-card border border-border rounded-2xl px-3 py-2.5 shadow-2xs flex flex-col gap-0.5">
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-text-muted">
+            <ShoppingCart className="w-3 h-3 text-primary shrink-0" />
+            <span className="truncate">Compras</span>
+          </div>
+          <div className="text-base sm:text-lg font-extrabold text-text-main leading-tight">
+            {qtdComprasMes}
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-2xl px-3 py-2.5 shadow-2xs flex flex-col gap-0.5">
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-text-muted">
+            <Receipt className="w-3 h-3 text-primary shrink-0" />
+            <span className="truncate">Ticket médio</span>
+          </div>
+          <div className="text-base sm:text-lg font-extrabold text-text-main leading-tight truncate">
+            {qtdComprasMes > 0 ? formatarMoeda(ticketMedioMes) : "—"}
+          </div>
+        </div>
+
+        <div className="bg-card border border-border rounded-2xl px-3 py-2.5 shadow-2xs flex flex-col gap-0.5">
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-text-muted">
+            <CalendarDays className="w-3 h-3 text-primary shrink-0" />
+            <span className="truncate">Média / dia</span>
+          </div>
+          <div className="text-base sm:text-lg font-extrabold text-text-main leading-tight truncate">
+            {gastoPorDia > 0 ? formatarMoeda(gastoPorDia) : "—"}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. ASSISTENTE DE IA COMPACTO */}
+      <section className="bg-card border border-border rounded-[20px] p-3.5 sm:p-4 shadow-sm flex flex-col gap-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center shrink-0">
               <Sparkles className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-extrabold text-text-main leading-tight">
-                Assistente de Gastos IA
+                Assistente IA
               </h3>
               <p className="text-[11px] text-text-muted truncate">
                 {iaPronta
-                  ? "Análise inteligente dos seus números sob demanda"
-                  : "Ative sua chave gratuita em Mais para receber dicas"}
+                  ? "Insights sob demanda dos seus gastos"
+                  : "Ative sua chave gratuita em Mais"}
               </p>
             </div>
           </div>
@@ -372,14 +505,15 @@ export default function BudgetAnalyticsDashboard({
 
         {iaPronta && temDadosMes && (
           <div className="flex flex-col gap-2 pt-1 border-t border-border/70">
-            <div className="flex flex-wrap gap-1.5">
+            {/* Perguntas rápidas em 1 linha rolável horizontalmente */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
               {PERGUNTAS_RAPIDAS.map((sug) => (
                 <button
                   key={sug}
                   type="button"
                   disabled={perguntando}
                   onClick={() => handlePerguntarIA(sug)}
-                  className="h-7 px-2.5 rounded-full bg-background border border-border hover:border-primary text-[11px] font-semibold text-text-muted hover:text-primary transition-colors cursor-pointer"
+                  className="h-7 px-2.5 rounded-full bg-background border border-border hover:border-primary text-[11px] font-semibold text-text-muted hover:text-primary transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
                   {sug}
                 </button>
@@ -423,124 +557,414 @@ export default function BudgetAnalyticsDashboard({
         )}
       </section>
 
-      {/* GRADE DE DASHBOARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* 2. EVOLUÇÃO DOS ÚLTIMOS 6 MESES */}
+      {/* 3. GRÁFICOS PRINCIPAIS: DONUT POR SETOR + EVOLUÇÃO 6 MESES SVG */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        {/* DONUT DE SETORES */}
         <section className="bg-card border border-border rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
+          <div>
+            <h3 className="text-sm font-extrabold text-text-main flex items-center gap-1.5">
+              <PieChart className="w-4 h-4 text-primary" />
+              <span>Distribuição por setor</span>
+            </h3>
+            <p className="text-[11px] text-text-muted">
+              Fatia dos gastos em {mesLabel.toLowerCase()}
+            </p>
+          </div>
+
+          {fatiasDonut.length === 0 ? (
+            <p className="text-xs text-text-muted py-6 text-center">
+              Sem gastos categorizados neste mês.
+            </p>
+          ) : (
+            <div className="flex items-center gap-4">
+              {/* SVG Donut */}
+              <div className="relative w-[124px] h-[124px] shrink-0">
+                <svg viewBox="0 0 128 128" className="w-full h-full -rotate-90">
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r={raioDonut}
+                    fill="none"
+                    stroke="#E4E6EE"
+                    strokeWidth="16"
+                  />
+                  {(() => {
+                    let offset = 0;
+                    return fatiasDonut.map((f, idx) => {
+                      const frac = gastoTotalMes > 0 ? f.valor / gastoTotalMes : 0;
+                      const seg = Math.max(0, frac * circDonut);
+                      const dashOffset = -offset;
+                      offset += seg;
+                      return (
+                        <circle
+                          key={`${f.label}-${idx}`}
+                          cx="64"
+                          cy="64"
+                          r={raioDonut}
+                          fill="none"
+                          stroke={f.cor}
+                          strokeWidth="16"
+                          strokeDasharray={`${Math.max(0, seg - 1.5)} ${circDonut}`}
+                          strokeDashoffset={dashOffset}
+                        />
+                      );
+                    });
+                  })()}
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
+                  <span className="text-[10px] font-semibold text-text-muted leading-none">
+                    Total
+                  </span>
+                  <span className="text-xs font-extrabold text-text-main mt-0.5 leading-tight">
+                    R$ {formatarCompacto(gastoTotalMes)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Legenda colorida */}
+              <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                {fatiasDonut.map((f) => (
+                  <div
+                    key={f.label}
+                    className="flex items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: f.cor }}
+                      />
+                      <span className="font-bold text-text-main truncate">
+                        {f.label}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-extrabold text-text-muted shrink-0">
+                      {f.pct}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* EVOLUÇÃO 6 MESES (SVG LIMPO SEM SOBREPOSIÇÃO) */}
+        <section className="bg-card border border-border rounded-[20px] p-4 shadow-sm flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-2">
-            <div>
+            <div className="min-w-0">
               <h3 className="text-sm font-extrabold text-text-main">
                 Evolução (6 meses)
               </h3>
-              <p className="text-[11px] text-text-muted">
-                Gasto mensal comparado ao teto atual
+              <p className="text-[11px] text-text-muted truncate">
+                Gasto mensal × teto atual
               </p>
             </div>
             {orcamentoTotalMes > 0 && (
-              <span className="text-[10px] font-bold text-text-muted border border-dashed border-primary/50 px-2 py-0.5 rounded-full">
-                Teto: {formatarMoeda(orcamentoTotalMes)}
+              <span className="text-[10px] font-bold text-primary-hover bg-primary-light px-2.5 py-1 rounded-full whitespace-nowrap shrink-0">
+                Teto {formatarMoeda(orcamentoTotalMes)}
               </span>
             )}
           </div>
 
-          <div className="relative h-36 pt-5 flex items-end justify-between gap-2">
-            {/* Linha tracejada do teto mensal */}
-            {alturaLinhaTeto !== null && (
-              <div
-                className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-primary/50 z-10"
-                style={{ bottom: `${Math.max(16, Math.round(alturaLinhaTeto * 0.82) + 18)}px` }}
-              />
-            )}
+          <div className="w-full">
+            <svg
+              viewBox={`0 0 ${svgW} ${svgH}`}
+              className="w-full h-36 overflow-visible"
+              role="img"
+              aria-label="Gráfico de evolução dos gastos nos últimos 6 meses"
+            >
+              {/* Linhas sutis de grade horizontal */}
+              {[0.25, 0.5, 0.75, 1].map((f) => {
+                const y = plotBottom - f * plotH;
+                return (
+                  <line
+                    key={f}
+                    x1="6"
+                    x2={svgW - 6}
+                    y1={y}
+                    y2={y}
+                    stroke="#ECEEF5"
+                    strokeWidth="1"
+                  />
+                );
+              })}
 
-            {evolucao6Meses.map((item) => {
-              const pct = Math.round((item.gasto / maxEvolucao) * 100);
-              const estourou =
-                orcamentoTotalMes > 0 && item.gasto > orcamentoTotalMes;
-              return (
-                <div
-                  key={item.anoMes}
-                  className="flex-1 flex flex-col items-center justify-end gap-1 h-full min-w-0"
-                >
-                  <span className="text-[10px] font-bold text-text-muted truncate max-w-full">
-                    {item.gasto > 0
-                      ? item.gasto >= 1000
-                        ? `${(item.gasto / 1000).toFixed(1).replace(".", ",")}k`
-                        : `${Math.round(item.gasto)}`
-                      : "—"}
-                  </span>
-                  <div className="w-full flex-1 flex items-end justify-center">
-                    <div
-                      className={`w-full max-w-[34px] rounded-t-lg transition-all duration-300 ${
-                        estourou
-                          ? "bg-budget-red"
-                          : item.atual
-                            ? "bg-primary"
-                            : "bg-primary/35"
-                      }`}
-                      style={{
-                        height: `${item.gasto > 0 ? Math.max(8, pct) : 3}%`,
-                      }}
-                      title={`${item.labelCurto}: ${formatarMoeda(item.gasto)}`}
+              {/* Linha tracejada do Teto mensal */}
+              {yTeto !== null && (
+                <line
+                  x1="6"
+                  x2={svgW - 6}
+                  y1={yTeto}
+                  y2={yTeto}
+                  stroke="#3B4CCA"
+                  strokeOpacity="0.45"
+                  strokeWidth="1.2"
+                  strokeDasharray="4 4"
+                />
+              )}
+
+              {/* Barras e rótulos */}
+              {evolucao6Meses.map((item, idx) => {
+                const colW = (svgW - 12) / evolucao6Meses.length;
+                const cx = 6 + colW * idx + colW / 2;
+                const barW = 28;
+                const barH =
+                  item.gasto > 0
+                    ? Math.max(8, (item.gasto / maxValorGrafico) * plotH)
+                    : 4;
+                const barY = plotBottom - barH;
+                const estourou =
+                  orcamentoTotalMes > 0 && item.gasto > orcamentoTotalMes;
+                const fill =
+                  item.gasto <= 0
+                    ? "#E4E6EE"
+                    : estourou
+                      ? "#D64545"
+                      : item.atual
+                        ? "#3B4CCA"
+                        : "#A5B0EC";
+
+                return (
+                  <g key={item.anoMes}>
+                    <rect
+                      x={cx - barW / 2}
+                      y={barY}
+                      width={barW}
+                      height={barH}
+                      rx="6"
+                      fill={fill}
                     />
-                  </div>
-                  <span
-                    className={`text-[11px] font-bold ${
-                      item.atual ? "text-primary" : "text-text-muted"
-                    }`}
-                  >
-                    {item.labelCurto}
-                  </span>
-                </div>
-              );
-            })}
+                    {item.gasto > 0 && (
+                      <text
+                        x={cx}
+                        y={barY - 6}
+                        textAnchor="middle"
+                        fontSize="10"
+                        fontWeight="700"
+                        fill={item.atual ? "#14171F" : "#5B6270"}
+                        style={{
+                          paintOrder: "stroke",
+                          stroke: "#FFFFFF",
+                          strokeWidth: "3px",
+                        }}
+                      >
+                        {formatarCompacto(item.gasto)}
+                      </text>
+                    )}
+                    <text
+                      x={cx}
+                      y={svgH - 6}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fontWeight={item.atual ? "800" : "600"}
+                      fill={item.atual ? "#3B4CCA" : "#5B6270"}
+                    >
+                      {item.labelCurto}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
           </div>
         </section>
+      </div>
 
-        {/* 3. TOP 5 PRODUTOS DO MÊS (VILÕES DO ORÇAMENTO) */}
+      {/* 4. FORMAS DE PAGAMENTO (BARRA EMPILHADA COLORIDA) + TOP PRODUTOS (COM SEPARAÇÃO DE AVULSOS) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        {/* FORMAS DE PAGAMENTO */}
         <section className="bg-card border border-border rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-extrabold text-text-main flex items-center gap-1.5">
-                <ShoppingBag className="w-4 h-4 text-primary" />
-                <span>Onde foi mais dinheiro</span>
-              </h3>
-              <p className="text-[11px] text-text-muted">
-                Top produtos comprados em {mesLabel.toLowerCase()}
-              </p>
-            </div>
+          <div>
+            <h3 className="text-sm font-extrabold text-text-main flex items-center gap-1.5">
+              <CreditCard className="w-4 h-4 text-primary" />
+              <span>Formas de pagamento</span>
+            </h3>
+            <p className="text-[11px] text-text-muted">
+              Divisão entre Pix, Crédito, VA e Débito
+            </p>
           </div>
 
-          {topProdutos.length === 0 ? (
-            <p className="text-xs text-text-muted py-6 text-center">
-              Nenhuma compra finalizada neste mês ainda.
+          {pagamentosResumo.length === 0 ? (
+            <p className="text-xs text-text-muted py-5 text-center">
+              Nenhum pagamento registrado neste mês.
             </p>
           ) : (
+            <div className="flex flex-col gap-3">
+              {/* Barra única empilhada colorida */}
+              <div className="h-3.5 w-full rounded-full bg-border overflow-hidden flex gap-0.5 p-0.5">
+                {pagamentosResumo.map((pg) => (
+                  <div
+                    key={pg.forma}
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.max(4, pg.percentual)}%`,
+                      backgroundColor: corFormaPagamento(pg.forma),
+                    }}
+                    title={`${pg.forma}: ${formatarMoeda(pg.valor)} (${pg.percentual}%)`}
+                  />
+                ))}
+              </div>
+
+              {/* Legenda detalhada em cards limpos */}
+              <div className="grid grid-cols-2 gap-2">
+                {pagamentosResumo.map((pg) => (
+                  <div
+                    key={pg.forma}
+                    className="bg-background border border-border/80 rounded-xl px-2.5 py-2 flex items-center justify-between gap-1.5"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: corFormaPagamento(pg.forma) }}
+                      />
+                      <span className="text-xs font-bold text-text-main truncate">
+                        {pg.forma}
+                      </span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-xs font-extrabold text-text-main leading-tight">
+                        {formatarMoeda(pg.valor)}
+                      </div>
+                      <div className="text-[10px] font-bold text-text-muted">
+                        {pg.percentual}%
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* ONDE FOI MAIS DINHEIRO (PRODUTOS REAIS | AVULSOS) */}
+        <section className="bg-card border border-border rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="text-sm font-extrabold text-text-main flex items-center gap-1.5">
+                <ShoppingBag className="w-4 h-4 text-primary shrink-0" />
+                <span className="truncate">Onde foi mais dinheiro</span>
+              </h3>
+              <p className="text-[11px] text-text-muted truncate">
+                {abaRanking === "produtos"
+                  ? `Top produtos em ${mesLabel.toLowerCase()}`
+                  : `Gastos avulsos em ${mesLabel.toLowerCase()}`}
+              </p>
+            </div>
+
+            {avulsosItens.length > 0 && (
+              <div className="flex items-center bg-background border border-border rounded-full p-0.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setAbaRanking("produtos")}
+                  className={`h-7 px-2.5 rounded-full text-[11px] font-bold transition-colors cursor-pointer ${
+                    abaRanking === "produtos"
+                      ? "bg-primary text-white"
+                      : "text-text-muted hover:text-text-main"
+                  }`}
+                >
+                  Produtos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAbaRanking("avulsos")}
+                  className={`h-7 px-2.5 rounded-full text-[11px] font-bold transition-colors cursor-pointer ${
+                    abaRanking === "avulsos"
+                      ? "bg-primary text-white"
+                      : "text-text-muted hover:text-text-main"
+                  }`}
+                >
+                  Avulsos
+                </button>
+              </div>
+            )}
+          </div>
+
+          {abaRanking === "produtos" ? (
+            topProdutos.length === 0 ? (
+              <p className="text-xs text-text-muted py-5 text-center">
+                Nenhum produto do catálogo comprado neste mês.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {topProdutos.slice(0, 5).map((prod, idx) => {
+                  const maxProd = topProdutos[0]?.gastoTotal || 1;
+                  const pct = Math.max(
+                    6,
+                    Math.round((prod.gastoTotal / maxProd) * 100)
+                  );
+                  return (
+                    <div
+                      key={`${prod.nome}-${idx}`}
+                      className="flex flex-col gap-1"
+                    >
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-bold text-text-main truncate">
+                          {prod.emoji} {prod.nome}
+                        </span>
+                        <span className="font-extrabold text-text-main shrink-0">
+                          {formatarMoeda(prod.gastoTotal)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-border overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-semibold text-text-muted shrink-0">
+                          {Number(prod.quantidadeTotal.toFixed(2))
+                            .toString()
+                            .replace(".", ",")}{" "}
+                          {prod.unidade}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {totalAvulsosMes > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAbaRanking("avulsos")}
+                    className="mt-1 pt-2 border-t border-border/70 flex items-center justify-between text-[11px] font-semibold text-text-muted hover:text-primary transition-colors cursor-pointer"
+                  >
+                    <span>
+                      + {formatarMoeda(totalAvulsosMes)} em {avulsosItens.length}{" "}
+                      {avulsosItens.length === 1
+                        ? "gasto avulso"
+                        : "gastos avulsos"}
+                    </span>
+                    <span className="font-bold text-primary">Ver →</span>
+                  </button>
+                )}
+              </div>
+            )
+          ) : (
             <div className="flex flex-col gap-2">
-              {topProdutos.slice(0, 5).map((prod, idx) => {
-                const maxProd = topProdutos[0]?.gastoTotal || 1;
-                const pct = Math.max(6, Math.round((prod.gastoTotal / maxProd) * 100));
+              {avulsosItens.map((av, idx) => {
+                const maxAv = avulsosItens[0]?.gastoTotal || 1;
+                const pct = Math.max(
+                  6,
+                  Math.round((av.gastoTotal / maxAv) * 100)
+                );
                 return (
-                  <div key={`${prod.nome}-${idx}`} className="flex flex-col gap-1">
+                  <div key={`${av.nome}-${idx}`} className="flex flex-col gap-1">
                     <div className="flex items-center justify-between gap-2 text-xs">
                       <span className="font-bold text-text-main truncate">
-                        {prod.emoji} {prod.nome}
+                        {av.emoji} {av.nome}
                       </span>
                       <span className="font-extrabold text-text-main shrink-0">
-                        {formatarMoeda(prod.gastoTotal)}
+                        {formatarMoeda(av.gastoTotal)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-1.5 rounded-full bg-border overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-primary"
+                          className="h-full rounded-full bg-amber-500"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
                       <span className="text-[10px] font-semibold text-text-muted shrink-0">
-                        {Number(prod.quantidadeTotal.toFixed(2))
-                          .toString()
-                          .replace(".", ",")}{" "}
-                        {prod.unidade}
+                        {av.ocorrencias}x avulso
                       </span>
                     </div>
                   </div>
@@ -549,8 +973,10 @@ export default function BudgetAnalyticsDashboard({
             </div>
           )}
         </section>
+      </div>
 
-        {/* 4. GASTOS POR MERCADO */}
+      {/* 5. GASTOS POR MERCADO + INFLAÇÃO DA CASA */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         <section className="bg-card border border-border rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
           <div>
             <h3 className="text-sm font-extrabold text-text-main flex items-center gap-1.5">
@@ -602,123 +1028,81 @@ export default function BudgetAnalyticsDashboard({
           )}
         </section>
 
-        {/* 5. FORMAS DE PAGAMENTO (VA, CRÉDITO, PIX...) */}
-        <section className="bg-card border border-border rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
-          <div>
-            <h3 className="text-sm font-extrabold text-text-main flex items-center gap-1.5">
-              <CreditCard className="w-4 h-4 text-primary" />
-              <span>Formas de pagamento</span>
-            </h3>
-            <p className="text-[11px] text-text-muted">
-              Quanto foi no VA, Crédito, Pix ou Débito
-            </p>
-          </div>
-
-          {pagamentosResumo.length === 0 ? (
-            <p className="text-xs text-text-muted py-5 text-center">
-              Nenhum pagamento registrado nas compras deste mês.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              {pagamentosResumo.map((pg) => (
-                <div key={pg.forma} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-text-main">{pg.forma}</span>
-                    <span className="font-extrabold text-text-main">
-                      {formatarMoeda(pg.valor)}{" "}
-                      <span className="text-[11px] font-semibold text-text-muted">
-                        ({pg.percentual}%)
-                      </span>
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full bg-border overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-300"
-                      style={{ width: `${Math.max(4, pg.percentual)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+        {(maisSubiram.length > 0 || maisCairam.length > 0) && (
+          <section className="bg-card border border-border rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
+            <div>
+              <h3 className="text-sm font-extrabold text-text-main">
+                Inflação da Casa
+              </h3>
+              <p className="text-[11px] text-text-muted">
+                Último preço pago × média anterior
+              </p>
             </div>
-          )}
-        </section>
+
+            <div className="flex flex-col gap-2.5">
+              {maisSubiram.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="text-[11px] font-extrabold text-budget-red-text flex items-center gap-1">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>Mais subiram</span>
+                  </div>
+                  {maisSubiram.map((item) => (
+                    <div
+                      key={`up-${item.nome}`}
+                      className="bg-budget-red-bg/50 border border-budget-red/20 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-text-main truncate">
+                          {item.emoji} {item.nome}
+                        </div>
+                        <div className="text-[10px] text-text-muted">
+                          {formatarMoeda(item.mediaAnterior)} →{" "}
+                          <strong className="text-text-main">
+                            {formatarMoeda(item.ultimoValor)}
+                          </strong>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-budget-red text-white text-[10px] font-extrabold shrink-0">
+                        +{item.variacaoPct}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {maisCairam.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="text-[11px] font-extrabold text-budget-green-text flex items-center gap-1">
+                    <TrendingDown className="w-3.5 h-3.5" />
+                    <span>Ficaram mais baratos</span>
+                  </div>
+                  {maisCairam.map((item) => (
+                    <div
+                      key={`down-${item.nome}`}
+                      className="bg-budget-green-bg/60 border border-budget-green/20 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-text-main truncate">
+                          {item.emoji} {item.nome}
+                        </div>
+                        <div className="text-[10px] text-text-muted">
+                          {formatarMoeda(item.mediaAnterior)} →{" "}
+                          <strong className="text-text-main">
+                            {formatarMoeda(item.ultimoValor)}
+                          </strong>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-budget-green text-white text-[10px] font-extrabold shrink-0">
+                        {item.variacaoPct}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
       </div>
-
-      {/* 6. INFLAÇÃO DA CASA (O QUE SUBIU E O QUE CAIU) */}
-      {(maisSubiram.length > 0 || maisCairam.length > 0) && (
-        <section className="bg-card border border-border rounded-[20px] p-4 shadow-sm flex flex-col gap-3">
-          <div>
-            <h3 className="text-sm font-extrabold text-text-main">
-              Inflação da Casa
-            </h3>
-            <p className="text-[11px] text-text-muted">
-              Último preço pago comparado à média anterior do produto
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {maisSubiram.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <div className="text-[11px] font-extrabold text-budget-red-text flex items-center gap-1">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  <span>Mais subiram</span>
-                </div>
-                {maisSubiram.map((item) => (
-                  <div
-                    key={`up-${item.nome}`}
-                    className="bg-budget-red-bg/50 border border-budget-red/20 rounded-xl px-2.5 py-2 flex items-center justify-between gap-2"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-text-main truncate">
-                        {item.emoji} {item.nome}
-                      </div>
-                      <div className="text-[10px] text-text-muted">
-                        {formatarMoeda(item.mediaAnterior)} →{" "}
-                        <strong className="text-text-main">
-                          {formatarMoeda(item.ultimoValor)}
-                        </strong>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full bg-budget-red text-white text-[10px] font-extrabold shrink-0">
-                      +{item.variacaoPct}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {maisCairam.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <div className="text-[11px] font-extrabold text-budget-green-text flex items-center gap-1">
-                  <TrendingDown className="w-3.5 h-3.5" />
-                  <span>Ficaram mais baratos</span>
-                </div>
-                {maisCairam.map((item) => (
-                  <div
-                    key={`down-${item.nome}`}
-                    className="bg-budget-green-bg/60 border border-budget-green/20 rounded-xl px-2.5 py-2 flex items-center justify-between gap-2"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-text-main truncate">
-                        {item.emoji} {item.nome}
-                      </div>
-                      <div className="text-[10px] text-text-muted">
-                        {formatarMoeda(item.mediaAnterior)} →{" "}
-                        <strong className="text-text-main">
-                          {formatarMoeda(item.ultimoValor)}
-                        </strong>
-                      </div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full bg-budget-green text-white text-[10px] font-extrabold shrink-0">
-                      {item.variacaoPct}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

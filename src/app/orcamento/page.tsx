@@ -16,6 +16,7 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import SupabaseSetupGuide from "@/components/SupabaseSetupGuide";
 import BottomNav from "@/components/BottomNav";
 import BudgetAnalyticsDashboard, {
+  type AvulsoItemResumo,
   type EvolucaoMesItem,
   type MercadoResumoItem,
   type PagamentoResumoItem,
@@ -277,6 +278,8 @@ export default function OrcamentoPage() {
     const gastoPorSetorMes = new Map<string, number>();
     const gastoPorCarrinhoMes = new Map<string, number>();
     const mapaTopProdutos = new Map<string, TopProdutoItem>();
+    const mapaAvulsos = new Map<string, AvulsoItemResumo>();
+    let totalAvulsosMes = 0;
 
     for (const item of todosItens) {
       const am = cartAnoMes.get(item.cart_id);
@@ -304,27 +307,47 @@ export default function OrcamentoPage() {
       const secId = item.sector_id_avulso || prod?.sector_id || "sem_setor";
       gastoPorSetorMes.set(secId, (gastoPorSetorMes.get(secId) || 0) + subtotal);
 
-      // Agrupa Top Produtos do mês
-      const chaveProd = prod?.id || `avulso:${(item.descricao_avulsa || "Avulso").toLowerCase()}`;
-      const nomeProd = prod?.nome || item.descricao_avulsa || "Item avulso";
+      const ehItemAvulso =
+        !prod || ehProdutoInternoSistema(prod.codigo_barras);
       const setorProd = secId !== "sem_setor" ? mapaSetores.get(secId) : undefined;
-      const emojiProd = prod?.emoji || setorProd?.emoji || "📦";
-      const unidadeProd = prod?.unidade || "un";
 
-      const atualProd = mapaTopProdutos.get(chaveProd);
-      if (atualProd) {
-        atualProd.quantidadeTotal += qtd;
-        atualProd.gastoTotal += subtotal;
-        atualProd.ocorrencias += 1;
+      if (ehItemAvulso) {
+        totalAvulsosMes += subtotal;
+        const nomeAvulso =
+          item.descricao_avulsa?.trim() || prod?.nome || "Gasto avulso";
+        const chaveAv = nomeAvulso.toLowerCase();
+        const atualAv = mapaAvulsos.get(chaveAv);
+        if (atualAv) {
+          atualAv.gastoTotal += subtotal;
+          atualAv.ocorrencias += 1;
+        } else {
+          mapaAvulsos.set(chaveAv, {
+            nome: nomeAvulso,
+            emoji: setorProd?.emoji || "🧾",
+            gastoTotal: subtotal,
+            ocorrencias: 1,
+          });
+        }
       } else {
-        mapaTopProdutos.set(chaveProd, {
-          nome: nomeProd,
-          emoji: emojiProd,
-          quantidadeTotal: qtd,
-          unidade: unidadeProd,
-          gastoTotal: subtotal,
-          ocorrencias: 1,
-        });
+        const chaveProd = prod.id;
+        const emojiProd = prod.emoji || setorProd?.emoji || "📦";
+        const unidadeProd = prod.unidade || "un";
+
+        const atualProd = mapaTopProdutos.get(chaveProd);
+        if (atualProd) {
+          atualProd.quantidadeTotal += qtd;
+          atualProd.gastoTotal += subtotal;
+          atualProd.ocorrencias += 1;
+        } else {
+          mapaTopProdutos.set(chaveProd, {
+            nome: prod.nome,
+            emoji: emojiProd,
+            quantidadeTotal: qtd,
+            unidade: unidadeProd,
+            gastoTotal: subtotal,
+            ocorrencias: 1,
+          });
+        }
       }
     }
 
@@ -352,20 +375,26 @@ export default function OrcamentoPage() {
         ? Math.round((gastoTotalMes / orcamentoTotalMes) * 100)
         : 0;
 
-    // 4. Projeção do mês atual (ritmo diário)
+    // 4. Projeção do mês atual + KPIs (compras, ticket médio e média diária)
     let projecaoMes: number | null = null;
+    const [anoSel, mesSel] = anoMesSelecionado.split("-").map(Number);
+    const diasNoMesSel = new Date(anoSel, mesSel, 0).getDate();
+    const diasBaseMedia = ehMesAtual
+      ? Math.max(1, new Date().getDate())
+      : diasNoMesSel;
+    const gastoPorDia = gastoTotalMes > 0 ? gastoTotalMes / diasBaseMedia : 0;
+
     if (ehMesAtual && gastoTotalMes > 0) {
       const hoje = new Date();
       const diaAtual = Math.max(1, hoje.getDate());
-      const diasNoMes = new Date(
-        hoje.getFullYear(),
-        hoje.getMonth() + 1,
-        0
-      ).getDate();
-      if (diaAtual >= 3 && diaAtual < diasNoMes) {
-        projecaoMes = (gastoTotalMes / diaAtual) * diasNoMes;
+      if (diaAtual >= 3 && diaAtual < diasNoMesSel) {
+        projecaoMes = (gastoTotalMes / diaAtual) * diasNoMesSel;
       }
     }
+
+    const qtdComprasMes = gastoPorCarrinhoMes.size;
+    const ticketMedioMes =
+      qtdComprasMes > 0 ? gastoTotalMes / qtdComprasMes : 0;
 
     // 5. Evolução dos últimos 6 meses até o mês selecionado
     const evolucao6Meses: EvolucaoMesItem[] = [];
@@ -397,8 +426,11 @@ export default function OrcamentoPage() {
       .filter((s) => s.gasto > 0 || s.orcamento > 0)
       .sort((a, b) => b.gasto - a.gasto);
 
-    // 7. Top Produtos do mês
+    // 7. Top Produtos reais do mês + Avulsos separados
     const topProdutos = Array.from(mapaTopProdutos.values()).sort(
+      (a, b) => b.gastoTotal - a.gastoTotal
+    );
+    const avulsosItens = Array.from(mapaAvulsos.values()).sort(
       (a, b) => b.gastoTotal - a.gastoTotal
     );
 
@@ -500,9 +532,14 @@ export default function OrcamentoPage() {
       gastoSemSetor,
       qtdSetoresEstourados,
       projecaoMes,
+      qtdComprasMes,
+      ticketMedioMes,
+      gastoPorDia,
       evolucao6Meses,
       setoresResumo,
       topProdutos,
+      avulsosItens,
+      totalAvulsosMes,
       mercadosResumo,
       pagamentosResumo,
       maisSubiram,
@@ -931,9 +968,14 @@ export default function OrcamentoPage() {
           gastoTotalMes={analise.gastoTotalMes}
           orcamentoTotalMes={analise.orcamentoTotalMes}
           projecaoMes={analise.projecaoMes}
+          qtdComprasMes={analise.qtdComprasMes}
+          ticketMedioMes={analise.ticketMedioMes}
+          gastoPorDia={analise.gastoPorDia}
           evolucao6Meses={analise.evolucao6Meses}
           setoresResumo={analise.setoresResumo}
           topProdutos={analise.topProdutos}
+          avulsosItens={analise.avulsosItens}
+          totalAvulsosMes={analise.totalAvulsosMes}
           mercadosResumo={analise.mercadosResumo}
           pagamentosResumo={analise.pagamentosResumo}
           maisSubiram={analise.maisSubiram}
